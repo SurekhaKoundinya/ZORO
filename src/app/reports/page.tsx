@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Download, BarChart3, TrendingUp, Users, Wallet, ArrowLeftRight, GitBranch, CheckCircle, RefreshCw } from "lucide-react";
+import { FileText, Download, TrendingUp, Users, Wallet, ArrowLeftRight, GitBranch, CheckCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 const reports = [
   {
@@ -86,6 +88,29 @@ const quickStats = [
 ];
 
 export default function ReportsPage() {
+  const { toast } = useToast();
+  const [generating, setGenerating] = useState(false);
+
+  const handleDownload = (title: string, fmt: string) => {
+    const csv = `Report: ${title}\nFormat: ${fmt}\nGenerated: ${new Date().toISOString()}\nData: Sample export for ZORO Admin Portal`;
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, "_")}.${fmt.toLowerCase()}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("success", "Download Started", `${title} (${fmt}) is downloading`);
+  };
+
+  const handleGenerateNew = async () => {
+    setGenerating(true);
+    toast("info", "Generating Report", "Your custom report is being prepared...");
+    await new Promise((r) => setTimeout(r, 2000));
+    setGenerating(false);
+    toast("success", "Report Ready", "Custom report has been generated and is ready to download");
+  };
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between">
@@ -93,13 +118,10 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-[var(--foreground)]">Reports</h1>
           <p className="text-sm text-[var(--muted)] mt-0.5">Export and analyze platform data</p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Generate New Report
+        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={handleGenerateNew} disabled={generating}
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm flex items-center gap-2 disabled:opacity-70">
+          <RefreshCw className={cn("w-4 h-4", generating && "animate-spin")} />
+          {generating ? "Generating..." : "Generate New Report"}
         </motion.button>
       </div>
 
@@ -161,12 +183,9 @@ export default function ReportsPage() {
               {report.status === "ready" ? (
                 <div className="grid grid-cols-3 gap-2">
                   {report.formats.map((fmt) => (
-                    <motion.button
-                      key={fmt}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      className={cn("flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[11px] font-semibold transition-all hover:opacity-80", formatColors[fmt])}
-                    >
+                    <motion.button key={fmt} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => handleDownload(report.title, fmt)}
+                      className={cn("flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[11px] font-semibold transition-all hover:opacity-80", formatColors[fmt])}>
                       <Download className="w-3 h-3" />
                       {fmt}
                     </motion.button>

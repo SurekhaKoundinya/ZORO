@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Filter, ChevronDown, X, ExternalLink, Shield, Wallet,
-  ArrowLeftRight, GitBranch, Clock, CheckCircle, XCircle, MoreHorizontal,
-  Mail, Globe, Calendar, TrendingUp, AlertTriangle, Eye, Ban
+  Search, X, Shield, Wallet,
+  ArrowLeftRight, GitBranch, Clock, CheckCircle, XCircle,
+  Globe, Calendar, AlertTriangle, Eye, Ban
 } from "lucide-react";
 import { users } from "@/lib/dummy-data";
 import { formatCurrency, cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { FilterDropdown } from "@/components/ui/FilterDropdown";
 
 const statusColors: Record<string, string> = {
   active: "text-success bg-success/10 border-success/20",
@@ -29,12 +31,35 @@ const riskColor = (score: number) => {
 };
 
 export default function UsersPage() {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<typeof users[0] | null>(null);
   const [page, setPage] = useState(1);
+  const [userList, setUserList] = useState(users);
 
-  const filtered = users.filter((u) => {
+  const handleSuspend = (u: typeof users[0]) => {
+    setUserList((prev) => prev.map((usr) => usr.id === u.id ? { ...usr, status: usr.status === "suspended" ? "active" : "suspended" } : usr));
+    const action = u.status === "suspended" ? "reactivated" : "suspended";
+    toast(u.status === "suspended" ? "success" : "warning", `User ${action}`, `${u.name} has been ${action}`);
+    setSelectedUser((prev) => prev?.id === u.id ? { ...prev, status: prev.status === "suspended" ? "active" : "suspended" } : prev);
+  };
+
+  const handleApproveKYC = (u: typeof users[0]) => {
+    setUserList((prev) => prev.map((usr) => usr.id === u.id ? { ...usr, kycLevel: "Level 3" } : usr));
+    toast("success", "KYC Approved", `${u.name} upgraded to Level 3`);
+    setSelectedUser((prev) => prev?.id === u.id ? { ...prev, kycLevel: "Level 3" } : prev);
+  };
+
+  const handleFreezeWallet = (u: typeof users[0]) => {
+    toast("info", "Wallet Frozen", `${u.name}'s wallet has been frozen`);
+  };
+
+  const handleSendMessage = (u: typeof users[0]) => {
+    toast("info", "Message Sent", `Email notification sent to ${u.email}`);
+  };
+
+  const filtered = userList.filter((u) => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       u.id.toLowerCase().includes(search.toLowerCase());
@@ -72,23 +97,17 @@ export default function UsersPage() {
           {search && <button onClick={() => setSearch("")}><X className="w-3.5 h-3.5 text-[var(--muted)]" /></button>}
         </div>
 
-        <div className="flex items-center gap-2">
-          {["all", "active", "suspended", "pending"].map((s) => (
-            <motion.button
-              key={s}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all border",
-                statusFilter === s
-                  ? "bg-[#FBD12D] text-black border-[#FBD12D]"
-                  : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--background)]"
-              )}
-            >
-              {s}
-            </motion.button>
-          ))}
-        </div>
+        <FilterDropdown
+          label="Status"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "all", label: "All Users" },
+            { value: "active", label: "Active" },
+            { value: "suspended", label: "Suspended" },
+            { value: "pending", label: "Pending" },
+          ]}
+        />
 
         <span className="text-xs text-[var(--muted)] ml-auto">{filtered.length} results</span>
       </div>
@@ -173,7 +192,7 @@ export default function UsersPage() {
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-[var(--border)]">
-          <span className="text-xs text-[var(--muted)]">Showing {filtered.length} of {users.length} users</span>
+          <span className="text-xs text-[var(--muted)]">Showing {filtered.length} of {userList.length} users</span>
           <div className="flex items-center gap-1">
             {[1, 2, 3, "...", 12].map((p, i) => (
               <motion.button
@@ -278,16 +297,16 @@ export default function UsersPage() {
 
                 {/* Actions */}
                 <div className="grid grid-cols-2 gap-2">
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-success/10 text-success text-sm font-semibold border border-success/20 hover:bg-success/20 transition-colors">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleApproveKYC(selectedUser)} className="py-2.5 rounded-xl bg-success/10 text-success text-sm font-semibold border border-success/20 hover:bg-success/20 transition-colors">
                     Approve KYC
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-danger/10 text-danger text-sm font-semibold border border-danger/20 hover:bg-danger/20 transition-colors">
-                    Suspend User
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleSuspend(selectedUser)} className={cn("py-2.5 rounded-xl text-sm font-semibold transition-colors", selectedUser.status === "suspended" ? "bg-success/10 text-success border border-success/20 hover:bg-success/20" : "bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20")}>
+                    {selectedUser.status === "suspended" ? "Reactivate User" : "Suspend User"}
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-[#6366F1]/10 text-[#6366F1] text-sm font-semibold border border-[#6366F1]/20 hover:bg-[#6366F1]/20 transition-colors">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleFreezeWallet(selectedUser)} className="py-2.5 rounded-xl bg-[#6366F1]/10 text-[#6366F1] text-sm font-semibold border border-[#6366F1]/20 hover:bg-[#6366F1]/20 transition-colors">
                     Freeze Wallet
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-[var(--border)] text-[var(--foreground)] text-sm font-semibold hover:bg-[var(--border)]/70 transition-colors">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleSendMessage(selectedUser)} className="py-2.5 rounded-xl bg-[var(--border)] text-[var(--foreground)] text-sm font-semibold hover:bg-[var(--border)]/70 transition-colors">
                     Send Message
                   </motion.button>
                 </div>

@@ -11,6 +11,7 @@ import {
   ScrollText, Settings, LogOut, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -28,6 +29,7 @@ const navItems = [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const { logout } = useAuth();
 
   return (
     <motion.aside
@@ -159,6 +161,7 @@ export default function Sidebar() {
       {/* Bottom: logout */}
       <div className="px-2 pb-4 space-y-1 border-t border-[var(--border)] pt-3">
         <motion.button
+          onClick={logout}
           whileHover={{ x: collapsed ? 0 : 2 }}
           whileTap={{ scale: 0.97 }}
           className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-[14px] text-[var(--muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-200"

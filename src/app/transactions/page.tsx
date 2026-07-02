@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, Filter, ArrowUpRight, ArrowDownRight, ExternalLink, Copy, Clock, ChevronRight, ArrowLeftRight } from "lucide-react";
+import { Search, X, ArrowUpRight, ArrowDownRight, ExternalLink, Copy, Clock, ChevronRight, ArrowLeftRight } from "lucide-react";
 import { recentTransactions } from "@/lib/dummy-data";
 import { formatCurrency, truncateHash, cn } from "@/lib/utils";
+import { FilterDropdown } from "@/components/ui/FilterDropdown";
 
 const allTx = [
   ...recentTransactions,
@@ -95,25 +96,30 @@ export default function TransactionsPage() {
           {search && <button onClick={() => setSearch("")}><X className="w-3.5 h-3.5 text-[var(--muted)]" /></button>}
         </div>
 
-        <div className="flex items-center gap-2">
-          {["all", "completed", "pending", "failed"].map((s) => (
-            <motion.button key={s} whileTap={{ scale: 0.96 }} onClick={() => setStatusFilter(s)}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all border",
-                statusFilter === s ? "bg-[#FBD12D] text-black border-[#FBD12D]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--background)]")}>
-              {s}
-            </motion.button>
-          ))}
-        </div>
+        <FilterDropdown
+          label="Status"
+          value={statusFilter}
+          options={[
+            { value: "all", label: "All" },
+            { value: "completed", label: "Completed" },
+            { value: "pending", label: "Pending" },
+            { value: "failed", label: "Failed" },
+          ]}
+          onChange={setStatusFilter}
+        />
 
-        <div className="flex items-center gap-2">
-          {["all", "Deposit", "Withdrawal", "Transfer", "Swap"].map((t) => (
-            <motion.button key={t} whileTap={{ scale: 0.96 }} onClick={() => setTypeFilter(t)}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
-                typeFilter === t ? "bg-[#FBD12D] text-black border-[#FBD12D]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--background)]")}>
-              {t}
-            </motion.button>
-          ))}
-        </div>
+        <FilterDropdown
+          label="Type"
+          value={typeFilter}
+          options={[
+            { value: "all", label: "All" },
+            { value: "Deposit", label: "Deposit" },
+            { value: "Withdrawal", label: "Withdrawal" },
+            { value: "Transfer", label: "Transfer" },
+            { value: "Swap", label: "Swap" },
+          ]}
+          onChange={setTypeFilter}
+        />
 
         <span className="text-xs text-[var(--muted)] ml-auto">{filtered.length} results</span>
       </div>

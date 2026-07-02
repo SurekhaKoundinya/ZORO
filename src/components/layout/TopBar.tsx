@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Bell, MessageSquare, Sun, Moon, ChevronDown,
+  Search, Bell, Sun, Moon, ChevronDown,
   Shield, LogOut, User, Settings, TrendingUp, AlertTriangle,
   CheckCircle, X, Zap,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const notifications = [
   { id: 1, type: "warning", title: "High Volume Alert", message: "ETH network transaction spike detected", time: "5 min ago", read: false },
@@ -33,6 +34,7 @@ export default function TopBar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [localNotifs, setLocalNotifs] = useState(notifications);
+  const { user, logout } = useAuth();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -45,7 +47,7 @@ export default function TopBar() {
 
   return (
     <header
-      className="sticky top-0 z-10 flex items-center gap-4 px-6 h-16 border-b border-[var(--border)] backdrop-blur-xl"
+      className="sticky top-0 z-10 flex items-center gap-4 px-6 h-24 border-b border-[var(--border)] backdrop-blur-xl"
       style={{ background: "var(--topbar-bg)" }}
     >
       {/* Search */}
@@ -94,16 +96,6 @@ export default function TopBar() {
           className="flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] text-[var(--muted)] hover:text-[#FBD12D] hover:border-[#FBD12D]/40 transition-all"
         >
           {mounted ? (theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />) : <span className="w-4 h-4 block" />}
-        </motion.button>
-
-        {/* Messages */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.92 }}
-          className="flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#FBD12D]/30 transition-all relative"
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-success border-2 border-[var(--card-bg)]" />
         </motion.button>
 
         {/* Notifications */}
@@ -193,13 +185,13 @@ export default function TopBar() {
             <div className="relative">
               <div className="w-7 h-7 rounded-[10px] flex items-center justify-center"
                 style={{ background: "linear-gradient(135deg,#FBD12D 0%,#FBD12D 100%)" }}>
-                <span className="text-[11px] font-black text-black">VV</span>
+                <span className="text-[11px] font-black text-black">{user?.avatar ?? "VV"}</span>
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border-2 border-[var(--card-bg)]" />
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-[12px] font-bold text-[var(--foreground)] leading-none">Vivek Villuri</p>
-              <p className="text-[10px] text-[var(--muted)] mt-0.5">Super Admin</p>
+              <p className="text-[12px] font-bold text-[var(--foreground)] leading-none">{user?.name ?? "Admin"}</p>
+              <p className="text-[10px] text-[var(--muted)] mt-0.5">{user?.role ?? "Super Admin"}</p>
             </div>
             <ChevronDown className="w-3 h-3 text-[var(--muted)]" />
           </motion.button>
@@ -221,10 +213,10 @@ export default function TopBar() {
                     style={{ background: "radial-gradient(circle,#FBD12D,transparent)", transform: "translate(8px,-8px)" }} />
                   <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-2"
                     style={{ background: "linear-gradient(135deg,#FBD12D,#FBD12D)" }}>
-                    <span className="text-sm font-black text-black">VV</span>
+                    <span className="text-sm font-black text-black">{user?.avatar ?? "VV"}</span>
                   </div>
-                  <p className="text-[13px] font-bold text-white">Vivek Villuri</p>
-                  <p className="text-[11px] text-white/50">vivekvilluri31@gmail.com</p>
+                  <p className="text-[13px] font-bold text-white">{user?.name ?? "Admin"}</p>
+                  <p className="text-[11px] text-white/50">{user?.email ?? ""}</p>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <Shield className="w-3 h-3 text-[#FBD12D]" />
                     <span className="text-[10px] text-[#FBD12D] font-semibold">Super Admin</span>
@@ -239,7 +231,7 @@ export default function TopBar() {
                   ))}
                 </div>
                 <div className="border-t border-[var(--border)] py-1.5">
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-danger hover:bg-danger/5 transition-colors">
+                  <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-danger hover:bg-danger/5 transition-colors">
                     <LogOut className="w-3.5 h-3.5" />
                     Sign Out
                   </button>

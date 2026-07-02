@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, Snowflake, ArrowUpRight, ArrowDownRight, Activity, Shield, Clock, AlertTriangle, ChevronRight, Copy, ExternalLink, TrendingUp, TrendingDown, X } from "lucide-react";
 import { wallets } from "@/lib/dummy-data";
 import { formatCurrency, truncateHash, cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 const networkColors: Record<string, string> = {
   Ethereum: "text-[#627EEA] bg-[#627EEA]/10",
@@ -33,6 +34,8 @@ const walletActivity = [
 ];
 
 export default function WalletsPage() {
+  const { toast } = useToast();
+  const [walletList, setWalletList] = useState(wallets);
   const [selected, setSelected] = useState<typeof wallets[0] | null>(wallets[0]);
   const [copied, setCopied] = useState(false);
 
@@ -40,6 +43,21 @@ export default function WalletsPage() {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleFreeze = (wallet: typeof wallets[0]) => {
+    const newStatus = wallet.status === "frozen" ? "active" : "frozen";
+    setWalletList((prev) => prev.map((w) => w.id === wallet.id ? { ...w, status: newStatus } : w));
+    setSelected((prev) => prev?.id === wallet.id ? { ...prev, status: newStatus } : prev);
+    toast(newStatus === "frozen" ? "warning" : "success", `Wallet ${newStatus === "frozen" ? "Frozen" : "Unfrozen"}`, `${wallet.owner}'s wallet is now ${newStatus}`);
+  };
+
+  const handleRiskReview = (wallet: typeof wallets[0]) => {
+    toast("info", "Risk Review Initiated", `Manual risk review started for ${wallet.owner}`);
+  };
+
+  const handleExplorer = (wallet: typeof wallets[0]) => {
+    toast("info", "Opening Explorer", `Viewing ${wallet.address.slice(0, 10)}... on blockchain explorer`);
   };
 
   return (
@@ -76,7 +94,7 @@ export default function WalletsPage() {
         {/* Wallet List */}
         <div className="lg:col-span-2 space-y-3">
           <h3 className="text-sm font-semibold text-[var(--foreground)]">Wallet Directory</h3>
-          {wallets.map((wallet, i) => (
+          {walletList.map((wallet, i) => (
             <motion.div
               key={wallet.id}
               initial={{ opacity: 0, y: 10 }}
@@ -217,15 +235,15 @@ export default function WalletsPage() {
 
                 {/* Actions */}
                 <div className="grid grid-cols-3 gap-3">
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-[#6366F1]/10 text-[#6366F1] border border-[#6366F1]/20 text-sm font-semibold hover:bg-[#6366F1]/20 transition-all flex items-center justify-center gap-2">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleFreeze(selected)} className="py-2.5 rounded-xl bg-[#6366F1]/10 text-[#6366F1] border border-[#6366F1]/20 text-sm font-semibold hover:bg-[#6366F1]/20 transition-all flex items-center justify-center gap-2">
                     <Snowflake className="w-4 h-4" />
                     {selected.status === "frozen" ? "Unfreeze" : "Freeze"}
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-[var(--border)] text-[var(--foreground)] text-sm font-semibold hover:bg-[var(--border)]/70 transition-all flex items-center justify-center gap-2">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleRiskReview(selected)} className="py-2.5 rounded-xl bg-[var(--border)] text-[var(--foreground)] text-sm font-semibold hover:bg-[var(--border)]/70 transition-all flex items-center justify-center gap-2">
                     <Shield className="w-4 h-4" />
                     Risk Review
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="py-2.5 rounded-xl bg-[#FBD12D]/10 text-[#FBD12D] border border-[#FBD12D]/20 text-sm font-semibold hover:bg-[#FBD12D]/20 transition-all flex items-center justify-center gap-2">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={() => handleExplorer(selected)} className="py-2.5 rounded-xl bg-[#FBD12D]/10 text-[#FBD12D] border border-[#FBD12D]/20 text-sm font-semibold hover:bg-[#FBD12D]/20 transition-all flex items-center justify-center gap-2">
                     <ExternalLink className="w-4 h-4" />
                     Explorer
                   </motion.button>

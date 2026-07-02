@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   Users, ShieldCheck, Clock, Wallet, ArrowLeftRight, TrendingUp,
   GitBranch, Activity, ArrowUpRight, ArrowDownRight, CheckCircle,
@@ -59,6 +60,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Page header */}
@@ -289,7 +291,7 @@ export default function DashboardPage() {
               <h3 className="text-[14px] font-bold text-[var(--foreground)]">Latest Transactions</h3>
               <p className="text-[12px] text-[var(--muted)] mt-0.5">Real-time activity feed</p>
             </div>
-            <button className="text-[12px] text-[#FBD12D] hover:text-[#FBD12D] font-bold transition-colors">View all →</button>
+            <button onClick={() => router.push("/transactions")} className="text-[12px] text-[#FBD12D] hover:text-[#FBD12D] font-bold transition-colors">View all →</button>
           </div>
           <div className="divide-y divide-[var(--border-soft)]">
             {recentTransactions.map((tx, i) => (
@@ -330,14 +332,15 @@ export default function DashboardPage() {
             <h3 className="text-[13px] font-bold text-[var(--foreground)] mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Approve KYC", icon: CheckCircle, bg: "#16C784", light: "#16C78415", text: "#16C784" },
-                { label: "Freeze Wallet", icon: Snowflake, bg: "#6366F1", light: "#6366F115", text: "#6366F1" },
-                { label: "Generate Report", icon: FileText, bg: "#FBD12D", light: "#FBD12D15", text: "#FBD12D" },
-                { label: "View Alerts", icon: AlertTriangle, bg: "#EF4444", light: "#EF444415", text: "#EF4444" },
-              ].map(({ label, icon: Icon, bg, light, text }) => (
+                { label: "Approve KYC", icon: CheckCircle, bg: "#16C784", light: "#16C78415", text: "#16C784", href: "/kyc" },
+                { label: "Freeze Wallet", icon: Snowflake, bg: "#6366F1", light: "#6366F115", text: "#6366F1", href: "/wallets" },
+                { label: "Generate Report", icon: FileText, bg: "#FBD12D", light: "#FBD12D15", text: "#FBD12D", href: "/reports" },
+                { label: "View Alerts", icon: AlertTriangle, bg: "#EF4444", light: "#EF444415", text: "#EF4444", href: "/system-logs" },
+              ].map(({ label, icon: Icon, bg, light, text, href }) => (
                 <motion.button key={label}
                   whileHover={{ scale: 1.03, y: -1 }}
                   whileTap={{ scale: 0.96 }}
+                  onClick={() => router.push(href)}
                   className="flex flex-col items-center gap-2 p-3.5 rounded-2xl border text-[12px] font-bold transition-all"
                   style={{ color: text, background: light, borderColor: `${bg}25` }}
                 >

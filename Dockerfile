@@ -1,30 +1,29 @@
-# Use official Node.js runtime as base image (Node version 20)
-FROM node:20
+FROM node:20-alpine AS builder
  
- 
-# Set working directory inside the container
-# All commands will run inside /app folder
 WORKDIR /app
  
- 
-# Copy only package.json and package-lock.json into container
-# This helps Docker cache dependencies (faster builds)
 COPY package*.json ./
  
-# Install all Node.js dependencies inside the container
 RUN npm install
  
- 
-# Copy all remaining project files into the container
-# (source code, routes, controllers, etc.)
 COPY . .
  
+RUN npm run build
  
-# Inform Docker that the app will run on port 3000
-# (this does NOT actually publish the port)
+FROM node:20-alpine
+ 
+WORKDIR /app
+ 
+ENV NODE_ENV=production
+ 
+COPY package*.json ./
+ 
+RUN npm install --omit=dev
+ 
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package*.json ./
+ 
 EXPOSE 3000
  
- 
-# Default command to run the application when container starts
-# This runs: npm start
 CMD ["npm", "start"]

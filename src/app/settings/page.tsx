@@ -7,6 +7,7 @@ import {
   CheckCircle, Copy, RefreshCw, Plus, Trash2, ToggleLeft, ToggleRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 const tabs = [
   { id: "profile", label: "Profile", icon: User },
@@ -39,18 +40,33 @@ const securitySettings = [
 ];
 
 export default function SettingsPage() {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState("");
   const [toggles, setToggles] = useState<Record<number, boolean>>(
     Object.fromEntries(securitySettings.map((s, i) => [i, s.enabled]))
   );
+  const [keyList, setKeyList] = useState(apiKeys);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(""), 2000);
   };
+
+  const handleSaveProfile = () => toast("success", "Profile Saved", "Your profile changes have been saved");
+  const handleUpdatePassword = () => toast("success", "Password Updated", "Your password has been changed successfully");
+  const handleDeleteKey = (id: string) => {
+    setKeyList((prev) => prev.filter((k) => k.id !== id));
+    toast("warning", "API Key Deleted", `Key ${id} has been revoked`);
+  };
+  const handleGenerateKey = () => {
+    const newId = `ZRO-API-${Math.floor(1000 + Math.random() * 9000)}`;
+    setKeyList((prev) => [...prev, { id: newId, name: "New API Key", scopes: ["read:all"], created: "Today", lastUsed: "Never", status: "active" }]);
+    toast("success", "API Key Generated", `New key ${newId} created`);
+  };
+  const handleNewRole = () => toast("info", "Coming Soon", "Role creation UI is under development");
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -125,7 +141,7 @@ export default function SettingsPage() {
                     ))}
                   </div>
 
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="mt-5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm">
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={handleSaveProfile} className="mt-5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm">
                     Save Changes
                   </motion.button>
                 </div>
@@ -153,7 +169,7 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     ))}
-                    <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm">
+                    <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} onClick={handleUpdatePassword} className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm">
                       Update Password
                     </motion.button>
                   </div>
@@ -214,7 +230,7 @@ export default function SettingsPage() {
                 <div className="card overflow-hidden">
                   <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)]">
                     <h3 className="text-sm font-bold text-[var(--foreground)]">Roles & Permissions</h3>
-                    <motion.button whileTap={{ scale: 0.97 }} className="px-4 py-2 rounded-xl bg-[#FBD12D]/10 text-[#FBD12D] border border-[#FBD12D]/20 text-xs font-semibold hover:bg-[#FBD12D]/20 flex items-center gap-1.5">
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={handleNewRole} className="px-4 py-2 rounded-xl bg-[#FBD12D]/10 text-[#FBD12D] border border-[#FBD12D]/20 text-xs font-semibold hover:bg-[#FBD12D]/20 flex items-center gap-1.5">
                       <Plus className="w-3.5 h-3.5" /> New Role
                     </motion.button>
                   </div>
@@ -259,12 +275,12 @@ export default function SettingsPage() {
                       <h3 className="text-sm font-bold text-[var(--foreground)]">API Keys</h3>
                       <p className="text-xs text-[var(--muted)] mt-0.5">Manage API access for integrations</p>
                     </div>
-                    <motion.button whileTap={{ scale: 0.97 }} className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-xs font-semibold shadow-gold-sm flex items-center gap-1.5">
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={handleGenerateKey} className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-xs font-semibold shadow-gold-sm flex items-center gap-1.5">
                       <Plus className="w-3.5 h-3.5" /> Generate Key
                     </motion.button>
                   </div>
                   <div className="divide-y divide-[var(--border)]">
-                    {apiKeys.map((key, i) => (
+                    {keyList.map((key, i) => (
                       <motion.div
                         key={key.id}
                         initial={{ opacity: 0, y: 8 }}
@@ -279,7 +295,7 @@ export default function SettingsPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="badge border border-success/20 text-success bg-success/10 text-[10px]">{key.status}</span>
-                            <motion.button whileTap={{ scale: 0.9 }} className="w-7 h-7 rounded-lg border border-danger/20 bg-danger/5 text-danger flex items-center justify-center hover:bg-danger/10 transition-colors">
+                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDeleteKey(key.id)} className="w-7 h-7 rounded-lg border border-danger/20 bg-danger/5 text-danger flex items-center justify-center hover:bg-danger/10 transition-colors">
                               <Trash2 className="w-3.5 h-3.5" />
                             </motion.button>
                           </div>

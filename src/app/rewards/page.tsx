@@ -1,10 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Gift, Zap, Star, TrendingUp, Clock, CheckCircle, Users } from "lucide-react";
+import { Gift, Zap, Star, TrendingUp, Users } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
-const rewards = [
+type Reward = { id: string; user: string; avatar: string; type: string; amount: number; status: string; date: string };
+
+const initialRewards: Reward[] = [
   { id: "RWD-001", user: "Liam O'Brien", avatar: "LO", type: "Referral Bonus", amount: 450.00, status: "pending", date: "Jun 25, 2026" },
   { id: "RWD-002", user: "Priya Sharma", avatar: "PS", type: "Trading Reward", amount: 280.00, status: "paid", date: "Jun 24, 2026" },
   { id: "RWD-003", user: "Arjun Mehta", avatar: "AM", type: "Referral Bonus", amount: 190.00, status: "paid", date: "Jun 24, 2026" },
@@ -27,6 +31,21 @@ const statusColors: Record<string, string> = {
 };
 
 export default function RewardsPage() {
+  const { toast } = useToast();
+  const [rewards, setRewards] = useState<Reward[]>(initialRewards);
+
+  const handleApprove = (reward: Reward) => {
+    setRewards((prev) => prev.map((r) => r.id === reward.id ? { ...r, status: "paid" } : r));
+    toast("success", "Reward Approved", `${formatCurrency(reward.amount)} approved for ${reward.user}`);
+  };
+
+  const handleApproveAll = () => {
+    const pendingCount = rewards.filter((r) => r.status === "pending").length;
+    if (pendingCount === 0) { toast("info", "No Pending Rewards", "All rewards are already processed"); return; }
+    setRewards((prev) => prev.map((r) => r.status === "pending" ? { ...r, status: "paid" } : r));
+    toast("success", "All Pending Approved", `${pendingCount} rewards queued for payment`);
+  };
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       <div>
@@ -34,20 +53,13 @@ export default function RewardsPage() {
         <p className="text-sm text-[var(--muted)] mt-0.5">Manage reward programs and distributions</p>
       </div>
 
-      {/* Programs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {rewardPrograms.map((prog, i) => {
           const Icon = prog.icon;
           return (
-            <motion.div
-              key={prog.name}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08 }}
-              whileHover={{ y: -2 }}
-              className={cn("card p-5 bg-gradient-to-br border", prog.color)}
-            >
-              <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-current/10", prog.color.split(" ")[4])}>
+            <motion.div key={prog.name} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+              whileHover={{ y: -2 }} className={cn("card p-5 bg-gradient-to-br border", prog.color)}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-current/10">
                 <Icon className="w-4 h-4" />
               </div>
               <h3 className="text-sm font-bold text-[var(--foreground)]">{prog.name}</h3>
@@ -61,18 +73,16 @@ export default function RewardsPage() {
         })}
       </div>
 
-      {/* Pending Rewards Table */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)]">
           <div>
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Recent Reward Distributions</h3>
-            <p className="text-xs text-[var(--muted)] mt-0.5">Last 24 hours</p>
+            <p className="text-xs text-[var(--muted)] mt-0.5">
+              {rewards.filter(r => r.status === "pending").length} pending · {rewards.filter(r => r.status === "paid").length} paid
+            </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-xs font-semibold shadow-gold-sm"
-          >
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={handleApproveAll}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-xs font-semibold shadow-gold-sm">
             Approve All Pending
           </motion.button>
         </div>
@@ -87,13 +97,8 @@ export default function RewardsPage() {
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {rewards.map((reward, i) => (
-                <motion.tr
-                  key={reward.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="hover:bg-[#FBD12D]/3 transition-colors"
-                >
+                <motion.tr key={reward.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                  className="hover:bg-[#FBD12D]/3 transition-colors">
                   <td className="px-5 py-3.5"><span className="text-xs font-mono text-[var(--muted)]">{reward.id}</span></td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
@@ -114,7 +119,8 @@ export default function RewardsPage() {
                   <td className="px-5 py-3.5"><span className="text-xs text-[var(--muted)]">{reward.date}</span></td>
                   <td className="px-5 py-3.5">
                     {reward.status === "pending" && (
-                      <motion.button whileTap={{ scale: 0.9 }} className="px-3 py-1 rounded-lg bg-success/10 text-success text-xs font-semibold border border-success/20 hover:bg-success/20 transition-colors">
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleApprove(reward)}
+                        className="px-3 py-1 rounded-lg bg-success/10 text-success text-xs font-semibold border border-success/20 hover:bg-success/20 transition-colors">
                         Approve
                       </motion.button>
                     )}
