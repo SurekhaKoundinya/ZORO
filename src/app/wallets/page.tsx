@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, Snowflake, ArrowUpRight, ArrowDownRight, Activity, Shield, Clock, AlertTriangle, ChevronRight, Copy, ExternalLink, TrendingUp, TrendingDown, X } from "lucide-react";
-import { wallets } from "@/lib/dummy-data";
 import { formatCurrency, truncateHash, cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { walletsApi } from "@/lib/api";
 
 const networkColors: Record<string, string> = {
   Ethereum: "text-[#627EEA] bg-[#627EEA]/10",
@@ -25,18 +25,48 @@ const statusColors: Record<string, string> = {
   frozen: "text-[#6366F1] bg-[#6366F1]/10 border-[#6366F1]/20",
 };
 
-const walletActivity = [
-  { time: "14:32", event: "Deposit received", amount: "+$48,500", type: "in" },
-  { time: "13:21", event: "Withdrawal processed", amount: "-$12,000", type: "out" },
-  { time: "11:08", event: "Internal transfer", amount: "+$5,200", type: "in" },
-  { time: "09:45", event: "Swap completed", amount: "-$8,000", type: "out" },
-  { time: "Yesterday", event: "Deposit received", amount: "+$31,200", type: "in" },
-];
+// Normalize API wallet object → consistent display fields (API returns
+// owner_name/owner_avatar/risk_level/last_activity/total_in/total_out/created_at,
+// not the flat owner/avatar/riskLevel/lastActivity/totalIn/totalOut/createdAt this page
+// renders). API has no per-wallet transaction count, so that falls back to 0.
+function normalizeWallet(w: any) {
+  const owner = w.owner_name ?? w.owner ?? "—";
+  return {
+    ...w,
+    owner,
+    avatar: w.owner_avatar ?? w.avatar ?? (owner.slice(0, 2).toUpperCase() || "??"),
+    riskLevel: w.risk_level ?? w.riskLevel ?? "low",
+    lastActivity: w.last_activity ?? w.lastActivity ?? "—",
+    totalIn: w.total_in ?? w.totalIn ?? 0,
+    totalOut: w.total_out ?? w.totalOut ?? 0,
+    createdAt: w.created_at ?? w.createdAt ?? "—",
+    transactions: w.transaction_count ?? w.transactions ?? 0,
+  };
+}
+
 
 export default function WalletsPage() {
   const { toast } = useToast();
-  const [walletList, setWalletList] = useState(wallets);
-  const [selected, setSelected] = useState<typeof wallets[0] | null>(wallets[0]);
+  const [walletList, setWalletList] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [walletActivity, setWalletActivity] = useState<any[]>([]);
+  const [walletStats, setWalletStats] = useState<any>({});
+
+  useEffect(() => {
+    walletsApi.list().then((r) => {
+      if (r.data?.length) {
+        const normalized = r.data.map(normalizeWallet);
+        setWalletList(normalized);
+        setSelected(normalized[0]);
+      }
+    }).catch(() => {});
+    walletsApi.stats().then((r) => {
+      if (r.data) setWalletStats(r.data);
+    }).catch(() => {});
+    (walletsApi as any).activity?.().then((r: any) => {
+      if (r?.data?.length) setWalletActivity(r.data);
+    }).catch(() => {});
+  }, []);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = (text: string) => {
@@ -45,18 +75,26 @@ export default function WalletsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleFreeze = (wallet: typeof wallets[0]) => {
+  const handleFreeze = async (wallet: any) => {
     const newStatus = wallet.status === "frozen" ? "active" : "frozen";
+    try {
+      if (newStatus === "frozen") await walletsApi.freeze(wallet.id);
+      else await walletsApi.unfreeze(wallet.id);
+    } catch { /* optimistic */ }
     setWalletList((prev) => prev.map((w) => w.id === wallet.id ? { ...w, status: newStatus } : w));
-    setSelected((prev) => prev?.id === wallet.id ? { ...prev, status: newStatus } : prev);
-    toast(newStatus === "frozen" ? "warning" : "success", `Wallet ${newStatus === "frozen" ? "Frozen" : "Unfrozen"}`, `${wallet.owner}'s wallet is now ${newStatus}`);
+    setSelected((prev: any) => prev?.id === wallet.id ? { ...prev, status: newStatus } : prev);
+    const owner = (wallet as any).owner ?? (wallet as any).owner_name;
+    toast(newStatus === "frozen" ? "warning" : "success", `Wallet ${newStatus === "frozen" ? "Frozen" : "Unfrozen"}`, `${owner}'s wallet is now ${newStatus}`);
   };
 
-  const handleRiskReview = (wallet: typeof wallets[0]) => {
-    toast("info", "Risk Review Initiated", `Manual risk review started for ${wallet.owner}`);
+  const handleRiskReview = async (wallet: any) => {
+    try {
+      await walletsApi.riskReview(wallet.id, (wallet as any).riskLevel ?? (wallet as any).risk_level ?? "medium", (wallet as any).riskScore ?? (wallet as any).risk_score ?? 50);
+    } catch { /* best effort */ }
+    toast("info", "Risk Review Initiated", `Manual risk review started for ${(wallet as any).owner ?? (wallet as any).owner_name}`);
   };
 
-  const handleExplorer = (wallet: typeof wallets[0]) => {
+  const handleExplorer = (wallet: any) => {
     toast("info", "Opening Explorer", `Viewing ${wallet.address.slice(0, 10)}... on blockchain explorer`);
   };
 
@@ -72,10 +110,10 @@ export default function WalletsPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Wallets", value: "18,294", icon: Wallet, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
-          { label: "Active Wallets", value: "17,841", icon: Activity, color: "text-success bg-success/10" },
-          { label: "Frozen Wallets", value: "48", icon: Snowflake, color: "text-[#6366F1] bg-[#6366F1]/10" },
-          { label: "High Risk", value: "127", icon: AlertTriangle, color: "text-danger bg-danger/10" },
+          { label: "Total Wallets",  value: (walletStats.total         ?? walletStats.total_wallets  ?? 0).toLocaleString(), icon: Wallet,        color: "text-[#FBD12D] bg-[#FBD12D]/10" },
+          { label: "Active Wallets", value: (walletStats.active        ?? walletStats.active_wallets ?? 0).toLocaleString(), icon: Activity,       color: "text-success bg-success/10"      },
+          { label: "Frozen Wallets", value: (walletStats.frozen        ?? walletStats.frozen_wallets ?? 0).toLocaleString(), icon: Snowflake,      color: "text-[#6366F1] bg-[#6366F1]/10"  },
+          { label: "High Risk",      value: (walletStats.high_risk     ?? walletStats.high_risk_count ?? 0).toLocaleString(), icon: AlertTriangle, color: "text-danger bg-danger/10"        },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -209,28 +247,39 @@ export default function WalletsPage() {
                 {/* Activity Timeline */}
                 <div className="card p-5">
                   <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">Wallet Activity</h3>
-                  <div className="relative space-y-0">
-                    {walletActivity.map((activity, i) => (
-                      <div key={i} className="flex items-center gap-3 py-2.5 relative">
-                        {i < walletActivity.length - 1 && (
-                          <div className="absolute left-[15px] top-8 w-[1px] h-full bg-[var(--border)]" />
-                        )}
-                        <div className={cn(
-                          "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 z-10",
-                          activity.type === "in" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                        )}>
-                          {activity.type === "in" ? <ArrowDownRight className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-[var(--foreground)]">{activity.event}</p>
-                          <p className="text-[10px] text-[var(--muted)]">{activity.time}</p>
-                        </div>
-                        <span className={cn("text-sm font-bold", activity.type === "in" ? "text-success" : "text-danger")}>
-                          {activity.amount}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  {walletActivity.length === 0 ? (
+                    <p className="text-xs text-[var(--muted)] text-center py-4">No recent activity</p>
+                  ) : (
+                    <div className="relative space-y-0">
+                      {walletActivity.map((activity: any, i: number) => {
+                        const isIn = (activity.type ?? activity.tx_type ?? activity.direction) === "in" || (activity.amount ?? 0) > 0;
+                        const timeLabel = activity.time ?? activity.created_at?.slice(11, 16) ?? "";
+                        const eventLabel = activity.event ?? activity.description ?? activity.tx_type ?? "Transaction";
+                        const amtRaw = activity.amount ?? activity.value ?? 0;
+                        const amtLabel = typeof amtRaw === "string" ? amtRaw : `${isIn ? "+" : "-"}$${Math.abs(amtRaw).toLocaleString()}`;
+                        return (
+                          <div key={i} className="flex items-center gap-3 py-2.5 relative">
+                            {i < walletActivity.length - 1 && (
+                              <div className="absolute left-[15px] top-8 w-[1px] h-full bg-[var(--border)]" />
+                            )}
+                            <div className={cn(
+                              "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 z-10",
+                              isIn ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                            )}>
+                              {isIn ? <ArrowDownRight className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-[var(--foreground)]">{eventLabel}</p>
+                              <p className="text-[10px] text-[var(--muted)]">{timeLabel}</p>
+                            </div>
+                            <span className={cn("text-sm font-bold", isIn ? "text-success" : "text-danger")}>
+                              {amtLabel}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Users, ShieldCheck, Clock, Wallet, ArrowLeftRight, TrendingUp,
   GitBranch, Activity, ArrowUpRight, ArrowDownRight, CheckCircle,
@@ -11,26 +12,12 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import {
-  statsData, dailyTransactions, walletGrowthData,
-  revenueData, userGrowthData, recentTransactions, kycRequests, systemAlerts,
-} from "@/lib/dummy-data";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { dashboardApi, transactionsApi, kycApi } from "@/lib/api";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 const item = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
-
-const stats = [
-  { label: "Total Users", value: formatNumber(statsData.totalUsers), change: "+12.4%", up: true, icon: Users, accent: "#FBD12D" },
-  { label: "Verified Users", value: formatNumber(statsData.verifiedUsers), change: "+8.2%", up: true, icon: ShieldCheck, accent: "#16C784" },
-  { label: "Pending KYC", value: formatNumber(statsData.pendingKYC), change: "+3.1%", up: false, icon: Clock, accent: "#FACC15" },
-  { label: "Wallet Balance", value: `$${(statsData.totalWalletBalance / 1_000_000).toFixed(1)}M`, change: "+15.8%", up: true, icon: Wallet, accent: "#6366F1" },
-  { label: "Transactions Today", value: formatNumber(statsData.transactionsToday), change: "+22.3%", up: true, icon: ArrowLeftRight, accent: "#EC4899" },
-  { label: "Monthly Revenue", value: `$${(statsData.monthlyRevenue / 1_000_000).toFixed(2)}M`, change: "+9.7%", up: true, icon: TrendingUp, accent: "#FBD12D" },
-  { label: "Referral Rewards", value: formatCurrency(statsData.referralRewards), change: "+18.2%", up: true, icon: GitBranch, accent: "#16C784" },
-  { label: "System Health", value: `${statsData.systemHealth}%`, change: "+0.01%", up: true, icon: Activity, accent: "#16C784" },
-];
 
 const statusColors: Record<string, string> = {
   completed: "text-success bg-success/10",
@@ -61,6 +48,46 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [liveStats, setLiveStats] = useState<any>(null);
+  const [liveCharts, setLiveCharts] = useState<any>(null);
+  const [liveTxns, setLiveTxns] = useState<any[]>([]);
+  const [liveKyc, setLiveKyc] = useState<any[]>([]);
+
+  useEffect(() => {
+    dashboardApi.stats().then((r) => setLiveStats(r.data)).catch(() => {});
+    dashboardApi.charts().then((r) => setLiveCharts(r.data)).catch(() => {});
+    transactionsApi.list({ limit: "6", ordering: "-created_at" }).then((r) => setLiveTxns(r.data ?? [])).catch(() => {});
+    kycApi.list({ status: "pending", limit: "3" }).then((r) => setLiveKyc(r.data ?? [])).catch(() => {});
+  }, []);
+
+  const s = {
+    totalUsers:        liveStats?.total_users         ?? 0,
+    verifiedUsers:     liveStats?.verified_users       ?? 0,
+    pendingKYC:        liveStats?.pending_kyc          ?? 0,
+    totalWalletBalance:liveStats?.total_wallet_balance ?? 0,
+    transactionsToday: liveStats?.transactions_today   ?? 0,
+    monthlyRevenue:    liveStats?.monthly_revenue      ?? 0,
+    referralRewards:   liveStats?.referral_rewards     ?? 0,
+    systemHealth:      liveStats?.system_health        ?? 0,
+  };
+
+  const chartStats = [
+    { label: "Total Users",        value: formatNumber(s.totalUsers),                                                       change: "+12.4%", up: true,  icon: Users,          accent: "#FBD12D" },
+    { label: "Verified Users",     value: formatNumber(s.verifiedUsers),                                                    change: "+8.2%",  up: true,  icon: ShieldCheck,    accent: "#16C784" },
+    { label: "Pending KYC",        value: formatNumber(s.pendingKYC),                                                       change: "+3.1%",  up: false, icon: Clock,          accent: "#FACC15" },
+    { label: "Wallet Balance",     value: `$${(s.totalWalletBalance / 1_000_000).toFixed(1)}M`,                             change: "+15.8%", up: true,  icon: Wallet,         accent: "#6366F1" },
+    { label: "Transactions Today", value: formatNumber(s.transactionsToday),                                                change: "+22.3%", up: true,  icon: ArrowLeftRight, accent: "#EC4899" },
+    { label: "Monthly Revenue",    value: `$${(s.monthlyRevenue / 1_000_000).toFixed(2)}M`,                                 change: "+9.7%",  up: true,  icon: TrendingUp,     accent: "#FBD12D" },
+    { label: "Referral Rewards",   value: formatCurrency(s.referralRewards),                                                change: "+18.2%", up: true,  icon: GitBranch,      accent: "#16C784" },
+    { label: "System Health",      value: `${s.systemHealth}%`,                                                             change: "+0.01%", up: true,  icon: Activity,       accent: "#16C784" },
+  ];
+
+  const dailyTx   = liveCharts?.daily_transactions ?? [];
+  const revData   = liveCharts?.revenue            ?? [];
+  const userGrowth= liveCharts?.user_growth        ?? [];
+  const txnList   = liveTxns;
+  const kycList   = liveKyc;
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Page header */}
@@ -102,7 +129,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-[28px] font-black text-black tracking-tight leading-none">
-              {formatNumber(statsData.totalUsers)}
+              {formatNumber(s.totalUsers)}
             </p>
             <p className="text-[12px] font-bold text-black/60 mt-1.5">Total Users</p>
             <div className="mt-4 pt-4 border-t border-black/15 flex items-center justify-between">
@@ -113,7 +140,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ── REMAINING 7 CARDS ── */}
-        {stats.slice(1).map((stat, i) => {
+        {chartStats.slice(1).map((stat, i) => {
           const Icon = stat.icon;
           // mini sparkline bars (fake but varied per card)
           const sparkHeights = [
@@ -182,7 +209,7 @@ export default function DashboardPage() {
             <span className="text-[11px] text-[var(--muted)] px-3 py-1 rounded-xl border border-[var(--border)] bg-[var(--input-bg)] font-medium">This Week</span>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dailyTransactions} barGap={6}>
+            <BarChart data={dailyTx} barGap={6}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v) => `$${v / 1000}k`} />
@@ -205,12 +232,13 @@ export default function DashboardPage() {
                 <p className="text-[12px] text-white/40 mt-0.5">Total balance 2026</p>
               </div>
             </div>
-            <p className="text-[28px] font-black gold-text leading-none">$94.7M</p>
+            <p className="text-[28px] font-black gold-text leading-none">${(s.totalWalletBalance / 1_000_000).toFixed(1)}M</p>
             <p className="text-[12px] text-success flex items-center gap-1 mt-1.5">
               <ArrowUpRight className="w-3.5 h-3.5" /> +15.8% from last month
             </p>
             <ResponsiveContainer width="100%" height={130} className="mt-4">
-              <AreaChart data={walletGrowthData}>
+              <AreaChart data={[]}>
+
                 <defs>
                   <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#FBD12D" stopOpacity={0.3} />
@@ -238,7 +266,7 @@ export default function DashboardPage() {
             <span className="text-[11px] text-[var(--muted)] px-3 py-1 rounded-xl border border-[var(--border)] bg-[var(--input-bg)] font-medium">2026</span>
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={revenueData}>
+            <AreaChart data={revData}>
               <defs>
                 <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#FBD12D" stopOpacity={0.2} />
@@ -268,7 +296,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={userGrowthData}>
+            <LineChart data={userGrowth}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "var(--muted)" }} axisLine={false} tickLine={false} width={38} tickFormatter={(v) => `${v / 1000}K`} />
@@ -294,7 +322,7 @@ export default function DashboardPage() {
             <button onClick={() => router.push("/transactions")} className="text-[12px] text-[#FBD12D] hover:text-[#FBD12D] font-bold transition-colors">View all →</button>
           </div>
           <div className="divide-y divide-[var(--border-soft)]">
-            {recentTransactions.map((tx, i) => (
+            {txnList.map((tx: any, i: number) => (
               <motion.div
                 key={tx.id}
                 initial={{ opacity: 0, x: -8 }}
@@ -312,11 +340,11 @@ export default function DashboardPage() {
                     <p className="text-[13px] font-semibold text-[var(--foreground)] truncate">{tx.user}</p>
                     <span className="text-[11px] text-[var(--muted)]">{tx.time}</span>
                   </div>
-                  <p className="text-[11px] text-[var(--muted)] mt-0.5">{tx.id} · {tx.type} · {tx.network}</p>
+                  <p className="text-[11px] text-[var(--muted)] mt-0.5">{tx.id ?? tx.tx_id} · {tx.type ?? tx.tx_type} · {tx.network}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-[13px] font-black text-[var(--foreground)]">
-                    {tx.type === "Withdrawal" ? "−" : "+"}{formatCurrency(tx.amount)}
+                    {(tx.type ?? tx.tx_type) === "Withdrawal" ? "−" : "+"}{formatCurrency(tx.amount)}
                   </p>
                   <span className={cn("badge mt-0.5 text-[10px]", statusColors[tx.status])}>{tx.status}</span>
                 </div>
@@ -358,7 +386,7 @@ export default function DashboardPage() {
               <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center text-[10px] font-black text-white">3</span>
             </div>
             <div className="space-y-2">
-              {systemAlerts.map((alert) => {
+              {([] as any[]).map((alert) => {
                 const cfg = alertColors[alert.severity];
                 return (
                   <motion.div key={alert.id} whileHover={{ x: 2 }}
@@ -378,18 +406,18 @@ export default function DashboardPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[13px] font-bold text-[var(--foreground)]">Pending KYC</h3>
-              <span className="text-[11px] text-[var(--muted)]">{kycRequests.length} requests</span>
+              <span className="text-[11px] text-[var(--muted)]">{kycList.length} requests</span>
             </div>
             <div className="space-y-3">
-              {kycRequests.slice(0, 3).map((kyc) => (
+              {kycList.slice(0, 3).map((kyc: any) => (
                 <div key={kyc.id} className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-[10px] font-black text-black shrink-0"
                     style={{ background: "linear-gradient(135deg,#FBD12D,#FBD12D)" }}>
-                    {kyc.avatar}
+                    {kyc.avatar ?? kyc.user_avatar ?? "??"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold text-[var(--foreground)] truncate">{kyc.user}</p>
-                    <p className="text-[10px] text-[var(--muted)]">{kyc.country} · {kyc.level}</p>
+                    <p className="text-[12px] font-semibold text-[var(--foreground)] truncate">{kyc.user ?? kyc.user_name}</p>
+                    <p className="text-[10px] text-[var(--muted)]">{kyc.country ?? kyc.user_country} · Level {kyc.level}</p>
                   </div>
                   <div className="flex gap-1.5">
                     <motion.button whileTap={{ scale: 0.88 }} className="w-6 h-6 rounded-lg bg-success/10 text-success hover:bg-success/20 flex items-center justify-center transition-colors">

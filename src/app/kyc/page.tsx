@@ -1,16 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle, XCircle, RefreshCw, Eye, Shield, FileText,
   Camera, Clock, Search, ChevronRight, Globe,
 } from "lucide-react";
-import { kycRequests } from "@/lib/dummy-data";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { kycApi } from "@/lib/api";
 
-type KYCRequest = typeof kycRequests[0];
+type KYCRequest = any;
+
+// Normalize API KYC object → consistent display fields (API returns
+// user_name/user_email/user_avatar/user_country/risk_score/document_types/submitted_at,
+// not the flat user/country/avatar/riskScore/documents/submittedAt this page renders).
+function normalizeKyc(k: any) {
+  const name = k.user_name ?? k.user ?? "—";
+  return {
+    ...k,
+    user: name,
+    email: k.user_email ?? k.email ?? "—",
+    avatar: k.user_avatar ?? k.avatar ?? (name.slice(0, 2).toUpperCase() || "??"),
+    country: k.user_country ?? k.country ?? "—",
+    submittedAt: k.submitted_at ?? k.submittedAt ?? "—",
+    riskScore: k.risk_score ?? k.riskScore ?? 0,
+    level: typeof k.level === "number" ? `Level ${k.level}` : (k.level ?? "Level 1"),
+    documents: k.document_types ?? k.documents?.map((d: any) => d.doc_type) ?? [],
+  };
+}
 
 const tabItems = [
   { label: "Pending", color: "text-warning" },
@@ -23,9 +41,16 @@ export default function KYCPage() {
   const [activeTab, setActiveTab] = useState("Pending");
   const [selected, setSelected] = useState<KYCRequest | null>(null);
   const [search, setSearch] = useState("");
-  const [pendingList, setPendingList] = useState<KYCRequest[]>(kycRequests);
+  const [pendingList, setPendingList] = useState<KYCRequest[]>([]);
   const [approvedList, setApprovedList] = useState<KYCRequest[]>([]);
   const [rejectedList, setRejectedList] = useState<KYCRequest[]>([]);
+
+  // Fetch real data from backend
+  useEffect(() => {
+    kycApi.list({ status: "pending" }).then((r) => { if (r.data?.length) setPendingList(r.data.map(normalizeKyc)); }).catch(() => {});
+    kycApi.list({ status: "approved" }).then((r) => { if (r.data?.length) setApprovedList(r.data.map(normalizeKyc)); }).catch(() => {});
+    kycApi.list({ status: "rejected" }).then((r) => { if (r.data?.length) setRejectedList(r.data.map(normalizeKyc)); }).catch(() => {});
+  }, []);
 
   const getActiveList = () => {
     const map: Record<string, KYCRequest[]> = {
@@ -42,22 +67,31 @@ export default function KYCPage() {
 
   const tabCounts = { Pending: pendingList.length, Approved: approvedList.length, Rejected: rejectedList.length };
 
-  const handleApprove = (req: KYCRequest) => {
+  const handleApprove = async (req: KYCRequest) => {
+    try {
+      await kycApi.approve(req.id);
+    } catch { /* optimistic */ }
     setPendingList((p) => p.filter((r) => r.id !== req.id));
-    setApprovedList((a) => [req, ...a]);
+    setApprovedList((a) => [{ ...req, status: "approved" }, ...a]);
     setSelected(null);
-    toast("success", "KYC Approved", `${req.user}'s ${req.level} verification approved`);
+    toast("success", "KYC Approved", `${(req as any).user ?? (req as any).user_name}'s Level ${req.level} verification approved`);
   };
 
-  const handleReject = (req: KYCRequest) => {
+  const handleReject = async (req: KYCRequest) => {
+    try {
+      await kycApi.reject(req.id, "Rejected by admin");
+    } catch { /* optimistic */ }
     setPendingList((p) => p.filter((r) => r.id !== req.id));
-    setRejectedList((r) => [req, ...r]);
+    setRejectedList((r) => [{ ...req, status: "rejected" }, ...r]);
     setSelected(null);
-    toast("error", "KYC Rejected", `${req.user}'s verification has been rejected`);
+    toast("error", "KYC Rejected", `${(req as any).user ?? (req as any).user_name}'s verification has been rejected`);
   };
 
-  const handleResubmit = (req: KYCRequest) => {
-    toast("info", "Resubmission Requested", `Email sent to ${req.user} to resubmit documents`);
+  const handleResubmit = async (req: KYCRequest) => {
+    try {
+      await kycApi.resubmit(req.id, "Please resubmit your documents");
+    } catch { /* best effort */ }
+    toast("info", "Resubmission Requested", `Email sent to ${(req as any).user ?? (req as any).user_name} to resubmit documents`);
   };
 
   return (
@@ -155,7 +189,7 @@ export default function KYCPage() {
                     <ChevronRight className="w-4 h-4 text-[var(--muted)] shrink-0" />
                   </div>
                   <div className="flex gap-1.5 mt-3">
-                    {req.documents.map((doc) => (
+                    {(req.documents ?? []).map((doc: any) => (
                       <span key={doc} className="px-2 py-0.5 rounded-md bg-[var(--border)] text-[10px] text-[var(--muted)] font-medium">{doc}</span>
                     ))}
                   </div>
@@ -213,7 +247,7 @@ export default function KYCPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">Submitted Documents</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    {selected.documents.map((doc) => (
+                    {(selected.documents ?? []).map((doc: any) => (
                       <motion.div key={doc} whileHover={{ scale: 1.01 }}
                         className="relative h-36 rounded-2xl border-2 border-dashed border-[#FBD12D]/30 bg-[#FBD12D]/5 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#FBD12D]/60 transition-colors">
                         <FileText className="w-8 h-8 text-[#FBD12D]" />

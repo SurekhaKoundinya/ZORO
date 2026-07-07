@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, X, Shield, Wallet,
   ArrowLeftRight, GitBranch, Clock, CheckCircle, XCircle,
   Globe, Calendar, AlertTriangle, Eye, Ban
 } from "lucide-react";
-import { users } from "@/lib/dummy-data";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
+import { usersApi } from "@/lib/api";
 
 const statusColors: Record<string, string> = {
   active: "text-success bg-success/10 border-success/20",
@@ -30,39 +30,85 @@ const riskColor = (score: number) => {
   return "text-danger";
 };
 
+// Normalize API user object → consistent display fields
+function normalizeUser(u: any) {
+  const firstName  = u.first_name  ?? u.firstName  ?? "";
+  const lastName   = u.last_name   ?? u.lastName   ?? "";
+  const fullName   = u.name ?? u.full_name ?? (`${firstName} ${lastName}`.trim() || (u.email ?? "—"));
+  const initials   = u.avatar ?? (fullName.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "??");
+  const kycNum     = u.kyc_level   ?? u.kycLevel   ?? u.kyc_status ?? 0;
+  const kycLabel   = typeof kycNum === "number"
+    ? (kycNum >= 3 ? "Level 3" : kycNum >= 2 ? "Level 2" : "Level 1")
+    : String(kycNum);
+  const isActive   = u.is_active   ?? true;
+  const status     = u.status      ?? (isActive ? "active" : "suspended");
+  return {
+    ...u,
+    name:          fullName,
+    avatar:        initials,
+    status,
+    kycLevel:      kycLabel,
+    walletBalance: u.walletBalance  ?? u.wallet_balance  ?? u.balance  ?? 0,
+    transactions:  u.transactions   ?? u.transaction_count ?? u.total_transactions ?? 0,
+    riskScore:     u.riskScore      ?? u.risk_score       ?? 0,
+    lastActive:    u.lastActive     ?? u.last_active      ?? u.last_login?.slice(0,10) ?? "—",
+    joinDate:      u.joinDate       ?? u.date_joined      ?? u.created_at?.slice(0,10) ?? "—",
+    country:       u.country        ?? "—",
+    phone:         u.phone          ?? "—",
+  };
+}
+
 export default function UsersPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedUser, setSelectedUser] = useState<typeof users[0] | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [page, setPage] = useState(1);
-  const [userList, setUserList] = useState(users);
+  const [userList, setUserList] = useState<any[]>([]);
 
-  const handleSuspend = (u: typeof users[0]) => {
-    setUserList((prev) => prev.map((usr) => usr.id === u.id ? { ...usr, status: usr.status === "suspended" ? "active" : "suspended" } : usr));
-    const action = u.status === "suspended" ? "reactivated" : "suspended";
-    toast(u.status === "suspended" ? "success" : "warning", `User ${action}`, `${u.name} has been ${action}`);
-    setSelectedUser((prev) => prev?.id === u.id ? { ...prev, status: prev.status === "suspended" ? "active" : "suspended" } : prev);
+  useEffect(() => {
+    usersApi.list().then((r) => {
+      if (r.data?.length) setUserList(r.data.map(normalizeUser));
+    }).catch(() => {});
+  }, []);
+
+  const handleSuspend = async (u: any) => {
+    const isSuspended = u.status === "suspended";
+    try {
+      if (isSuspended) await usersApi.reactivate(u.id);
+      else await usersApi.suspend(u.id);
+    } catch { /* optimistic */ }
+    const action = isSuspended ? "reactivated" : "suspended";
+    setUserList((prev) => prev.map((usr) => usr.id === u.id ? normalizeUser({ ...usr, status: isSuspended ? "active" : "suspended" }) : usr));
+    toast(isSuspended ? "success" : "warning", `User ${action}`, `${(u as any).name ?? (u as any).full_name} has been ${action}`);
+    setSelectedUser((prev: any) => prev?.id === u.id ? { ...prev, status: isSuspended ? "active" : "suspended" } : prev);
   };
 
-  const handleApproveKYC = (u: typeof users[0]) => {
-    setUserList((prev) => prev.map((usr) => usr.id === u.id ? { ...usr, kycLevel: "Level 3" } : usr));
-    toast("success", "KYC Approved", `${u.name} upgraded to Level 3`);
-    setSelectedUser((prev) => prev?.id === u.id ? { ...prev, kycLevel: "Level 3" } : prev);
+  const handleApproveKYC = async (u: any) => {
+    try {
+      await usersApi.approveKyc(u.id);
+    } catch { /* optimistic */ }
+    setUserList((prev) => prev.map((usr) => usr.id === u.id ? normalizeUser({ ...usr, kyc_level: 3 }) : usr));
+    toast("success", "KYC Approved", `${(u as any).name ?? (u as any).full_name} upgraded to Level 3`);
+    setSelectedUser((prev: any) => prev?.id === u.id ? { ...prev, kycLevel: "Level 3", kyc_level: 3 } : prev);
   };
 
-  const handleFreezeWallet = (u: typeof users[0]) => {
-    toast("info", "Wallet Frozen", `${u.name}'s wallet has been frozen`);
+  const handleFreezeWallet = async (u: any) => {
+    try {
+      await usersApi.freezeWallet(u.id);
+    } catch { /* best effort */ }
+    toast("info", "Wallet Frozen", `${(u as any).name ?? (u as any).full_name}'s wallet has been frozen`);
   };
 
-  const handleSendMessage = (u: typeof users[0]) => {
+  const handleSendMessage = (u: any) => {
     toast("info", "Message Sent", `Email notification sent to ${u.email}`);
   };
 
   const filtered = userList.filter((u) => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.id.toLowerCase().includes(search.toLowerCase());
+    const name = u.name ?? u.full_name ?? "";
+    const matchSearch = name.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.id ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || u.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -73,7 +119,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">User Management</h1>
-          <p className="text-sm text-[var(--muted)] mt-0.5">{users.length.toLocaleString()} total accounts</p>
+          <p className="text-sm text-[var(--muted)] mt-0.5">{userList.length.toLocaleString()} total accounts</p>
         </div>
         <motion.button
           whileHover={{ scale: 1.02 }}
@@ -157,7 +203,7 @@ export default function UsersPage() {
                       <span className="text-sm font-semibold text-[var(--foreground)]">{formatCurrency(user.walletBalance)}</span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="text-sm text-[var(--foreground)]">{user.transactions.toLocaleString()}</span>
+                      <span className="text-sm text-[var(--foreground)]">{(user.transactions ?? 0).toLocaleString()}</span>
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
@@ -263,9 +309,9 @@ export default function UsersPage() {
                 <div className="grid grid-cols-2 gap-3 mb-6">
                   {[
                     { icon: Wallet, label: "Balance", value: formatCurrency(selectedUser.walletBalance) },
-                    { icon: ArrowLeftRight, label: "Transactions", value: selectedUser.transactions.toLocaleString() },
-                    { icon: GitBranch, label: "Referrals", value: selectedUser.referrals.toString() },
-                    { icon: AlertTriangle, label: "Risk Score", value: selectedUser.riskScore.toString(), color: riskColor(selectedUser.riskScore) },
+                    { icon: ArrowLeftRight, label: "Transactions", value: (selectedUser.transactions ?? 0).toLocaleString() },
+                    { icon: GitBranch, label: "Referrals", value: String(selectedUser.referrals ?? selectedUser.referral_count ?? 0) },
+                    { icon: AlertTriangle, label: "Risk Score", value: String(selectedUser.riskScore ?? selectedUser.risk_score ?? 0), color: riskColor(selectedUser.riskScore ?? selectedUser.risk_score ?? 0) },
                   ].map(({ icon: Icon, label, value, color }) => (
                     <div key={label} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--background)]">
                       <div className="flex items-center gap-2 mb-2">

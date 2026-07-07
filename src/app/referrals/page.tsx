@@ -1,10 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { GitBranch, Trophy, TrendingUp, Users, DollarSign, ArrowUpRight } from "lucide-react";
-import { referrals, referralStats, referralChartData } from "@/lib/dummy-data";
 import { formatCurrency, formatNumber, cn } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { referralsApi } from "@/lib/api";
 
 const tierColors: Record<string, string> = {
   Diamond: "text-[#B9F2FF] bg-[#B9F2FF]/10 border-[#B9F2FF]/20",
@@ -17,6 +18,22 @@ const tierColors: Record<string, string> = {
 const rankColors = ["text-[#FBD12D]", "text-[#C0C0C0]", "text-[#CD7F32]"];
 
 export default function ReferralsPage() {
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [referralStats, setReferralStats] = useState<any>({});
+  const [referralChartData, setReferralChartData] = useState<any[]>([]);
+
+  useEffect(() => {
+    referralsApi.leaderboard().then((r) => {
+      if (r.data?.length) setReferrals(r.data);
+    }).catch(() => {});
+    referralsApi.list().then((r) => {
+      if (r.meta) setReferralStats((prev: any) => ({ ...prev, ...r.meta }));
+    }).catch(() => {});
+    (referralsApi as any).chartData?.().then((r: any) => {
+      if (r?.data?.length) setReferralChartData(r.data);
+    }).catch(() => {});
+  }, []);
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       <div>
@@ -27,12 +44,12 @@ export default function ReferralsPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
         {[
-          { label: "Total Referrals", value: formatNumber(referralStats.totalReferrals), icon: GitBranch, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
-          { label: "Active Referrers", value: formatNumber(referralStats.activeReferrers), icon: Users, color: "text-success bg-success/10" },
-          { label: "Rewards Issued", value: `$${formatNumber(referralStats.totalRewardsIssued)}`, icon: DollarSign, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
-          { label: "Pending Rewards", value: `$${formatNumber(referralStats.pendingRewards)}`, icon: TrendingUp, color: "text-warning bg-warning/10" },
-          { label: "Conversion Rate", value: `${referralStats.conversionRate}%`, icon: ArrowUpRight, color: "text-success bg-success/10" },
-          { label: "Avg. Earnings", value: formatCurrency(referralStats.avgEarningsPerReferrer), icon: Trophy, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
+          { label: "Total Referrals", value: formatNumber(referralStats.totalReferrals ?? referralStats.total_referrals ?? 0), icon: GitBranch, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
+          { label: "Active Referrers", value: formatNumber(referralStats.activeReferrers ?? referralStats.active_referrers ?? 0), icon: Users, color: "text-success bg-success/10" },
+          { label: "Rewards Issued", value: `$${formatNumber(referralStats.totalRewardsIssued ?? referralStats.total_rewards_issued ?? 0)}`, icon: DollarSign, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
+          { label: "Pending Rewards", value: `$${formatNumber(referralStats.pendingRewards ?? referralStats.pending_rewards ?? 0)}`, icon: TrendingUp, color: "text-warning bg-warning/10" },
+          { label: "Conversion Rate", value: `${referralStats.conversionRate ?? referralStats.conversion_rate ?? 0}%`, icon: ArrowUpRight, color: "text-success bg-success/10" },
+          { label: "Avg. Earnings", value: formatCurrency(referralStats.avgEarningsPerReferrer ?? referralStats.avg_earnings_per_referrer ?? 0), icon: Trophy, color: "text-[#FBD12D] bg-[#FBD12D]/10" },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -102,9 +119,18 @@ export default function ReferralsPage() {
         </div>
 
         <div className="space-y-2">
-          {referrals.map((referrer, i) => (
+          {referrals.map((referrer, i) => {
+            // Handle both dummy data fields AND Django ORM annotation keys (referrer__email, etc.)
+            const refUser = referrer.user ?? referrer.user_name ?? referrer.name ??
+              (((referrer["referrer__first_name"] ?? "") + "").trim() || referrer["referrer__email"] || "");
+            const refAvatar = referrer.avatar ?? refUser.slice(0,2).toUpperCase();
+            const refTier = referrer.tier ?? referrer.level ?? "Bronze";
+            const refReferrals = referrer.referrals ?? referrer.total ?? referrer.total_referrals ?? referrer.referral_count ?? 0;
+            const refEarnings = referrer.earnings ?? referrer.total_earnings ?? referrer.rewards_earned ?? 0;
+            const refJoinDate = referrer.joinDate ?? referrer.joined ?? referrer.created_at?.slice(0,10) ?? "";
+            return (
             <motion.div
-              key={referrer.rank}
+              key={referrer.rank ?? i}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.06 }}
@@ -118,36 +144,37 @@ export default function ReferralsPage() {
                   ? `${rankColors[i]} bg-current/10`
                   : "text-[var(--muted)] bg-[var(--border)]"
               )}>
-                {i < 3 ? (i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉") : referrer.rank}
+                {i < 3 ? (i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉") : referrer.rank ?? i + 1}
               </div>
 
               {/* Avatar */}
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FBD12D]/20 to-[#FBD12D]/5 border border-[#FBD12D]/20 flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-[#FBD12D]">{referrer.avatar}</span>
+                <span className="text-xs font-bold text-[#FBD12D]">{refAvatar}</span>
               </div>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[var(--foreground)]">{referrer.user}</p>
-                <p className="text-xs text-[var(--muted)]">Joined {referrer.joinDate}</p>
+                <p className="text-sm font-semibold text-[var(--foreground)]">{refUser}</p>
+                <p className="text-xs text-[var(--muted)]">Joined {refJoinDate}</p>
               </div>
 
               {/* Tier */}
-              <span className={cn("badge border hidden sm:inline-flex", tierColors[referrer.tier])}>{referrer.tier}</span>
+              <span className={cn("badge border hidden sm:inline-flex", tierColors[refTier] ?? "text-[var(--muted)] border-[var(--border)]")}>{refTier}</span>
 
               {/* Referrals */}
               <div className="text-center hidden md:block">
-                <p className="text-lg font-bold text-[var(--foreground)]">{referrer.referrals}</p>
+                <p className="text-lg font-bold text-[var(--foreground)]">{refReferrals}</p>
                 <p className="text-[10px] text-[var(--muted)]">referrals</p>
               </div>
 
               {/* Earnings */}
               <div className="text-right">
-                <p className="text-base font-bold gold-text">{formatCurrency(referrer.earnings)}</p>
+                <p className="text-base font-bold gold-text">{formatCurrency(refEarnings)}</p>
                 <p className="text-[10px] text-[var(--muted)]">earned</p>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

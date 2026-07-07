@@ -10,14 +10,19 @@ import {
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { notificationsApi } from "@/lib/api";
 
-const notifications = [
-  { id: 1, type: "warning", title: "High Volume Alert", message: "ETH network transaction spike detected", time: "5 min ago", read: false },
-  { id: 2, type: "success", title: "KYC Approved", message: "Sarah Chen — Level 2 verification complete", time: "23 min ago", read: false },
-  { id: 3, type: "danger", title: "Security Alert", message: "3 failed logins from 185.42.91.14", time: "2 hr ago", read: false },
-  { id: 4, type: "info", title: "Monthly Report Ready", message: "June 2026 revenue report generated", time: "4 hr ago", read: true },
-  { id: 5, type: "success", title: "Backup Complete", message: "124GB archived to secure storage", time: "5 hr ago", read: true },
-];
+// Normalize API notification → display shape (API uses notif_type/is_read/created_at).
+function normalizeNotif(n: any) {
+  return {
+    id: n.id,
+    type: n.notif_type ?? n.type ?? "info",
+    title: n.title ?? "Notification",
+    message: n.message ?? "",
+    time: n.time ?? n.created_at?.slice(0, 16).replace("T", " ") ?? "",
+    read: n.is_read ?? n.read ?? false,
+  };
+}
 
 const notifIconMap = {
   warning: { icon: AlertTriangle, color: "text-warning bg-warning/10" },
@@ -33,13 +38,27 @@ export default function TopBar() {
   const [showProfile, setShowProfile] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [localNotifs, setLocalNotifs] = useState(notifications);
+  const [localNotifs, setLocalNotifs] = useState<ReturnType<typeof normalizeNotif>[]>([]);
   const { user, logout } = useAuth();
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    notificationsApi.list().then((r) => {
+      if (r.data?.length) setLocalNotifs(r.data.map(normalizeNotif));
+    }).catch(() => {});
+  }, []);
 
   const unread = localNotifs.filter((n) => !n.read).length;
-  const markAllRead = () => setLocalNotifs((n) => n.map((x) => ({ ...x, read: true })));
+
+  const markAllRead = () => {
+    setLocalNotifs((n) => n.map((x) => ({ ...x, read: true })));
+    notificationsApi.markAllRead().catch(() => {});
+  };
+
+  const markOneRead = (id: string) => {
+    setLocalNotifs((n) => n.map((x) => (x.id === id ? { ...x, read: true } : x)));
+    notificationsApi.markRead(id).catch(() => {});
+  };
 
   const dateStr = mounted
     ? new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
@@ -140,13 +159,17 @@ export default function TopBar() {
                   )}
                 </div>
                 <div className="divide-y divide-[var(--border)] max-h-80 overflow-y-auto">
+                  {localNotifs.length === 0 && (
+                    <p className="text-[12px] text-[var(--muted)] text-center py-8">No notifications</p>
+                  )}
                   {localNotifs.map((notif) => {
-                    const cfg = notifIconMap[notif.type as keyof typeof notifIconMap];
+                    const cfg = notifIconMap[notif.type as keyof typeof notifIconMap] ?? notifIconMap.info;
                     const Icon = cfg.icon;
                     return (
                       <motion.div
                         key={notif.id}
                         whileHover={{ backgroundColor: "rgba(251,209,45,0.03)" }}
+                        onClick={() => markOneRead(notif.id)}
                         className={cn("flex gap-3 px-4 py-3 cursor-pointer transition-colors", !notif.read && "bg-[#FBD12D]/[0.03]")}
                       >
                         <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5", cfg.color)}>

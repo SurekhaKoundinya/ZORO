@@ -1,114 +1,89 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FileText, Download, TrendingUp, Users, Wallet, ArrowLeftRight, GitBranch, CheckCircle, RefreshCw } from "lucide-react";
+import { FileText, Download, RefreshCw, TrendingUp, Users, Wallet, ArrowLeftRight, GitBranch, CheckCircle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
-
-const reports = [
-  {
-    title: "Monthly Revenue Report",
-    description: "Full revenue breakdown, fees, and P&L for June 2026",
-    icon: TrendingUp,
-    color: "from-[#FBD12D]/20 to-[#FBD12D]/5 border-[#FBD12D]/20",
-    iconColor: "text-[#FBD12D] bg-[#FBD12D]/10",
-    formats: ["CSV", "Excel", "PDF"],
-    size: "4.2 MB",
-    generated: "Jun 25, 2026",
-    status: "ready",
-  },
-  {
-    title: "User Growth Analytics",
-    description: "Registration trends, KYC completion rates, and user segments",
-    icon: Users,
-    color: "from-success/20 to-success/5 border-success/20",
-    iconColor: "text-success bg-success/10",
-    formats: ["CSV", "Excel", "PDF"],
-    size: "2.8 MB",
-    generated: "Jun 25, 2026",
-    status: "ready",
-  },
-  {
-    title: "Transaction Audit Report",
-    description: "Complete transaction log with flags, risk scores and blockchain refs",
-    icon: ArrowLeftRight,
-    color: "from-[#6366F1]/20 to-[#6366F1]/5 border-[#6366F1]/20",
-    iconColor: "text-[#6366F1] bg-[#6366F1]/10",
-    formats: ["CSV", "Excel"],
-    size: "18.4 MB",
-    generated: "Jun 25, 2026",
-    status: "ready",
-  },
-  {
-    title: "Wallet Balance Snapshot",
-    description: "All wallet balances, network distribution and risk breakdown",
-    icon: Wallet,
-    color: "from-warning/20 to-warning/5 border-warning/20",
-    iconColor: "text-warning bg-warning/10",
-    formats: ["CSV", "Excel", "PDF"],
-    size: "1.6 MB",
-    generated: "Jun 24, 2026",
-    status: "ready",
-  },
-  {
-    title: "Referral Performance Report",
-    description: "Referrer tiers, conversion rates, and reward distribution",
-    icon: GitBranch,
-    color: "from-[#EC4899]/20 to-[#EC4899]/5 border-[#EC4899]/20",
-    iconColor: "text-[#EC4899] bg-[#EC4899]/10",
-    formats: ["CSV", "PDF"],
-    size: "0.9 MB",
-    generated: "Jun 24, 2026",
-    status: "ready",
-  },
-  {
-    title: "Compliance & KYC Summary",
-    description: "KYC approval rates, rejected documents, and risk flags",
-    icon: CheckCircle,
-    color: "from-[#FBD12D]/20 to-[#FBD12D]/5 border-[#FBD12D]/20",
-    iconColor: "text-[#FBD12D] bg-[#FBD12D]/10",
-    formats: ["PDF"],
-    size: "2.1 MB",
-    generated: "Processing...",
-    status: "processing",
-  },
-];
+import { reportsApi, API_BASE, getToken } from "@/lib/api";
 
 const formatColors: Record<string, string> = {
-  CSV: "text-success bg-success/10 border-success/20",
+  CSV:   "text-success bg-success/10 border-success/20",
   Excel: "text-[#1D6F42] bg-[#1D6F42]/10 border-[#1D6F42]/20",
-  PDF: "text-danger bg-danger/10 border-danger/20",
+  PDF:   "text-danger bg-danger/10 border-danger/20",
+  XLSX:  "text-[#1D6F42] bg-[#1D6F42]/10 border-[#1D6F42]/20",
 };
 
-const quickStats = [
-  { label: "Reports Generated", value: "1,284", icon: FileText },
-  { label: "Data Exported", value: "48.2 GB", icon: Download },
-  { label: "Scheduled Reports", value: "12", icon: RefreshCw },
-];
+const typeIcon: Record<string, React.ElementType> = {
+  revenue:    TrendingUp,
+  user:       Users,
+  users:      Users,
+  transaction: ArrowLeftRight,
+  wallet:     Wallet,
+  wallets:    Wallet,
+  referral:   GitBranch,
+  compliance: CheckCircle,
+  kyc:        CheckCircle,
+  custom:     FileText,
+};
 
 export default function ReportsPage() {
   const { toast } = useToast();
+  const [reportList, setReportList] = useState<any[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [reportStats, setReportStats] = useState<any>({});
 
-  const handleDownload = (title: string, fmt: string) => {
-    const csv = `Report: ${title}\nFormat: ${fmt}\nGenerated: ${new Date().toISOString()}\nData: Sample export for ZORO Admin Portal`;
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/\s+/g, "_")}.${fmt.toLowerCase()}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("success", "Download Started", `${title} (${fmt}) is downloading`);
+  useEffect(() => {
+    reportsApi.list().then((r) => {
+      if (Array.isArray(r)) {
+        setReportList(r);
+        setReportStats({ total: r.length, ready: r.filter((x: any) => x.status === "ready" || x.status === "completed").length });
+      } else if (r.data) {
+        setReportList(r.data);
+        setReportStats({
+          total: (r as any).meta?.total ?? r.data.length,
+          ready: r.data.filter((x: any) => x.status === "ready" || x.status === "completed").length,
+          ...(r as any).meta,
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleDownload = async (report: any, fmt?: string) => {
+    const reportId = report.id ?? report.report_id;
+    const title    = report.title ?? report.report_type ?? "Report";
+    const format   = fmt ?? report.format ?? "csv";
+    try {
+      const token = getToken();
+      const url   = reportsApi.downloadUrl(reportId);
+      const res   = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (res.ok) {
+        const blob  = await res.blob();
+        const burl  = URL.createObjectURL(blob);
+        const a     = document.createElement("a");
+        a.href      = burl;
+        a.download  = `${title.replace(/\s+/g, "_")}.${format.toLowerCase()}`;
+        a.click();
+        URL.revokeObjectURL(burl);
+        toast("success", "Download Started", `${title} (${format.toUpperCase()}) is downloading`);
+        return;
+      }
+    } catch { /* fall through */ }
+    toast("error", "Download Failed", "Could not download report — check your connection");
   };
 
   const handleGenerateNew = async () => {
     setGenerating(true);
-    toast("info", "Generating Report", "Your custom report is being prepared...");
-    await new Promise((r) => setTimeout(r, 2000));
-    setGenerating(false);
-    toast("success", "Report Ready", "Custom report has been generated and is ready to download");
+    toast("info", "Generating Report", "Your report is being prepared...");
+    try {
+      const r = await reportsApi.generate("custom", "csv");
+      toast("success", "Report Ready", "Custom report has been generated");
+      if (r.data) setReportList((prev) => [r.data, ...prev]);
+    } catch (e: any) {
+      toast("error", "Generation Failed", e?.message ?? "Could not generate report");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
@@ -125,9 +100,13 @@ export default function ReportsPage() {
         </motion.button>
       </div>
 
-      {/* Quick Stats */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        {quickStats.map((s) => {
+        {[
+          { label: "Reports Available",   value: (reportStats.total        ?? reportList.length).toLocaleString(),                          icon: FileText   },
+          { label: "Ready to Download",   value: (reportStats.ready        ?? reportList.filter((r) => r.status === "ready" || r.status === "completed").length).toLocaleString(), icon: Download   },
+          { label: "Scheduled Reports",   value: (reportStats.scheduled    ?? 0).toLocaleString(),                                          icon: RefreshCw  },
+        ].map((s) => {
           const Icon = s.icon;
           return (
             <motion.div key={s.label} whileHover={{ y: -2 }} className="card p-5 flex items-center gap-4">
@@ -143,90 +122,79 @@ export default function ReportsPage() {
         })}
       </div>
 
-      {/* Report Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {reports.map((report, i) => {
-          const Icon = report.icon;
-          return (
-            <motion.div
-              key={report.title}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07 }}
-              whileHover={{ y: -3 }}
-              className={cn("card p-6 bg-gradient-to-br border relative overflow-hidden", report.color)}
-            >
-              {report.status === "processing" && (
-                <div className="absolute top-3 right-3">
-                  <RefreshCw className="w-3.5 h-3.5 text-[var(--muted)] animate-spin" />
+      {/* Report Cards from API */}
+      {reportList.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {reportList.map((report: any, i: number) => {
+            const title    = report.title ?? report.report_type ?? `Report #${report.id}`;
+            const desc     = report.description ?? report.report_type ?? "";
+            const status   = report.status ?? "ready";
+            const size     = report.file_size ?? report.size ?? "";
+            const generated = report.generated_at?.slice(0, 10) ?? report.created_at?.slice(0, 10) ?? report.generated ?? "";
+            const formats: string[]  = report.formats ?? (report.format ? [report.format.toUpperCase()] : ["CSV"]);
+            const rtype    = (report.report_type ?? report.type ?? "custom").toLowerCase();
+            const Icon     = typeIcon[rtype] ?? FileText;
+            const isReady  = status === "ready" || status === "completed";
+            return (
+              <motion.div key={report.id ?? i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
+                whileHover={{ y: -3 }} className="card p-6 relative overflow-hidden">
+                {!isReady && (
+                  <div className="absolute top-3 right-3">
+                    <RefreshCw className="w-3.5 h-3.5 text-[var(--muted)] animate-spin" />
+                  </div>
+                )}
+                <div className="w-10 h-10 rounded-xl bg-[#FBD12D]/10 border border-[#FBD12D]/20 flex items-center justify-center mb-4">
+                  <Icon className="w-5 h-5 text-[#FBD12D]" />
                 </div>
-              )}
-
-              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4", report.iconColor)}>
-                <Icon className="w-5 h-5" />
-              </div>
-
-              <h3 className="text-sm font-bold text-[var(--foreground)] mb-1.5">{report.title}</h3>
-              <p className="text-xs text-[var(--muted)] leading-relaxed mb-4">{report.description}</p>
-
-              <div className="flex items-center gap-1.5 mb-4">
-                {report.formats.map((fmt) => (
-                  <span key={fmt} className={cn("badge border text-[10px]", formatColors[fmt])}>{fmt}</span>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-[var(--muted)] mb-4">
-                <span>{report.generated}</span>
-                <span>{report.size}</span>
-              </div>
-
-              {report.status === "ready" ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {report.formats.map((fmt) => (
-                    <motion.button key={fmt} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                      onClick={() => handleDownload(report.title, fmt)}
-                      className={cn("flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[11px] font-semibold transition-all hover:opacity-80", formatColors[fmt])}>
-                      <Download className="w-3 h-3" />
-                      {fmt}
-                    </motion.button>
+                <h3 className="text-sm font-bold text-[var(--foreground)] mb-1.5 capitalize">{title.replace(/_/g, " ")}</h3>
+                {desc && <p className="text-xs text-[var(--muted)] leading-relaxed mb-4">{desc}</p>}
+                <div className="flex items-center gap-1.5 mb-4">
+                  {formats.map((fmt: string) => (
+                    <span key={fmt} className={cn("badge border text-[10px]", formatColors[fmt.toUpperCase()] ?? "text-[var(--muted)] border-[var(--border)]")}>{fmt.toUpperCase()}</span>
                   ))}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] justify-center">
-                  <RefreshCw className="w-3.5 h-3.5 text-[var(--muted)] animate-spin" />
-                  <span className="text-xs text-[var(--muted)]">Generating...</span>
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* Scheduled Reports */}
-      <div className="card p-6">
-        <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">Scheduled Reports</h3>
-        <div className="space-y-3">
-          {[
-            { name: "Daily Transaction Summary", schedule: "Every day at 00:00 UTC", next: "Jun 26, 2026", format: "CSV" },
-            { name: "Weekly Revenue Report", schedule: "Every Monday at 06:00 UTC", next: "Jun 30, 2026", format: "PDF" },
-            { name: "Monthly Compliance Report", schedule: "1st of each month", next: "Jul 1, 2026", format: "PDF" },
-          ].map((sched) => (
-            <div key={sched.name} className="flex items-center gap-4 p-4 rounded-2xl border border-[var(--border)] hover:border-[#FBD12D]/20 transition-colors">
-              <div className="w-8 h-8 rounded-lg bg-[#FBD12D]/10 flex items-center justify-center shrink-0">
-                <RefreshCw className="w-3.5 h-3.5 text-[#FBD12D]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-[var(--foreground)]">{sched.name}</p>
-                <p className="text-xs text-[var(--muted)]">{sched.schedule}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-[var(--muted)]">Next: {sched.next}</p>
-                <span className={cn("badge border text-[10px] mt-1", formatColors[sched.format])}>{sched.format}</span>
-              </div>
-            </div>
-          ))}
+                {(generated || size) && (
+                  <div className="flex items-center justify-between text-[11px] text-[var(--muted)] mb-4">
+                    {generated && <span>{generated}</span>}
+                    {size      && <span>{size}</span>}
+                  </div>
+                )}
+                {isReady ? (
+                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${formats.length}, 1fr)` }}>
+                    {formats.map((fmt: string) => (
+                      <motion.button key={fmt} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        onClick={() => handleDownload(report, fmt.toLowerCase())}
+                        className={cn("flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[11px] font-semibold transition-all hover:opacity-80",
+                          formatColors[fmt.toUpperCase()] ?? "text-[var(--muted)] border-[var(--border)]")}>
+                        <Download className="w-3 h-3" />
+                        {fmt.toUpperCase()}
+                      </motion.button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] justify-center">
+                    <RefreshCw className="w-3.5 h-3.5 text-[var(--muted)] animate-spin" />
+                    <span className="text-xs text-[var(--muted)]">Processing...</span>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
-      </div>
+      ) : (
+        <div className="card p-16 flex flex-col items-center justify-center text-center">
+          <div className="w-14 h-14 rounded-2xl bg-[#FBD12D]/10 border border-[#FBD12D]/20 flex items-center justify-center mb-4">
+            <FileText className="w-7 h-7 text-[#FBD12D]" />
+          </div>
+          <p className="text-base font-semibold text-[var(--foreground)] mb-1">No reports yet</p>
+          <p className="text-sm text-[var(--muted)] mb-5">Generate your first report to see it here</p>
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={handleGenerateNew} disabled={generating}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FBD12D] to-[#FBD12D] text-black text-sm font-semibold shadow-gold-sm flex items-center gap-2 disabled:opacity-70">
+            <RefreshCw className={cn("w-4 h-4", generating && "animate-spin")} />
+            {generating ? "Generating..." : "Generate Report"}
+          </motion.button>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ export default function LoginPage() {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 700));
     const ok = await login(email, password);
-    if (!ok) setError("Invalid credentials. Try admin@zoro.com / admin123");
+    if (!ok) setError("Invalid credentials. Check your email and password.");
     setLoading(false);
   };
 
@@ -97,21 +97,6 @@ export default function LoginPage() {
           </motion.div>
         </div>
 
-        {/* Bottom: Stat chips */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
-          className="flex items-center gap-4 relative z-10">
-          {[
-            { value: "128K+", label: "Users" },
-            { value: "$94.7M", label: "Wallet Balance" },
-            { value: "99.9%", label: "Uptime" },
-          ].map((s) => (
-            <div key={s.label} className="px-4 py-3 rounded-2xl"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <p className="text-[16px] font-black text-white">{s.value}</p>
-              <p className="text-[10px] text-white/30 font-medium mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </motion.div>
       </div>
 
       {/* ── RIGHT PANEL ── */}
@@ -219,7 +204,7 @@ export default function LoginPage() {
           </div>
 
           {/* Demo credentials card */}
-          <motion.button type="button" onClick={() => { setEmail("admin@zoro.com"); setPassword("admin123"); setError(""); }}
+          <motion.button type="button" onClick={() => { setEmail("admin@zoro.finance"); setPassword("ChangeMe123!"); setError(""); }}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="w-full text-left px-5 py-4 rounded-2xl transition-all duration-200 group"
@@ -235,11 +220,11 @@ export default function LoginPage() {
             <div className="flex gap-6">
               <div>
                 <p className="text-[10px] text-white/25 font-medium mb-0.5">EMAIL</p>
-                <p className="text-[12px] text-white/55 font-mono">admin@zoro.com</p>
+                <p className="text-[12px] text-white/55 font-mono">admin@zoro.finance</p>
               </div>
               <div>
                 <p className="text-[10px] text-white/25 font-medium mb-0.5">PASSWORD</p>
-                <p className="text-[12px] text-white/55 font-mono">admin123</p>
+                <p className="text-[12px] text-white/55 font-mono">ChangeMe123!</p>
               </div>
             </div>
           </motion.button>

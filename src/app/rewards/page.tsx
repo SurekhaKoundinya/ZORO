@@ -1,28 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Gift, Zap, Star, TrendingUp, Users } from "lucide-react";
+import { Gift, Zap, Star, TrendingUp } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
+import { rewardsApi } from "@/lib/api";
 
-type Reward = { id: string; user: string; avatar: string; type: string; amount: number; status: string; date: string };
-
-const initialRewards: Reward[] = [
-  { id: "RWD-001", user: "Liam O'Brien", avatar: "LO", type: "Referral Bonus", amount: 450.00, status: "pending", date: "Jun 25, 2026" },
-  { id: "RWD-002", user: "Priya Sharma", avatar: "PS", type: "Trading Reward", amount: 280.00, status: "paid", date: "Jun 24, 2026" },
-  { id: "RWD-003", user: "Arjun Mehta", avatar: "AM", type: "Referral Bonus", amount: 190.00, status: "paid", date: "Jun 24, 2026" },
-  { id: "RWD-004", user: "Yuki Tanaka", avatar: "YT", type: "Loyalty Reward", amount: 320.00, status: "pending", date: "Jun 23, 2026" },
-  { id: "RWD-005", user: "Marcus Johnson", avatar: "MJ", type: "Milestone Bonus", amount: 500.00, status: "paid", date: "Jun 23, 2026" },
-  { id: "RWD-006", user: "Sarah Chen", avatar: "SC", type: "Referral Bonus", amount: 160.00, status: "processing", date: "Jun 22, 2026" },
-];
-
-const rewardPrograms = [
-  { name: "Referral Program", icon: Users, color: "from-[#FBD12D]/20 to-[#FBD12D]/5 border-[#FBD12D]/20 text-[#FBD12D]", totalPaid: "$284,730", rate: "$30 per referral", active: 1248 },
-  { name: "Trading Rewards", icon: TrendingUp, color: "from-success/20 to-success/5 border-success/20 text-success", totalPaid: "$142,810", rate: "0.05% of volume", active: 8421 },
-  { name: "Loyalty Program", icon: Star, color: "from-[#6366F1]/20 to-[#6366F1]/5 border-[#6366F1]/20 text-[#6366F1]", totalPaid: "$98,240", rate: "Based on tier", active: 4200 },
-  { name: "Milestone Bonuses", icon: Zap, color: "from-warning/20 to-warning/5 border-warning/20 text-warning", totalPaid: "$56,800", rate: "One-time awards", active: 892 },
-];
+type Reward = any;
 
 const statusColors: Record<string, string> = {
   paid: "text-success bg-success/10 border-success/20",
@@ -32,17 +17,27 @@ const statusColors: Record<string, string> = {
 
 export default function RewardsPage() {
   const { toast } = useToast();
-  const [rewards, setRewards] = useState<Reward[]>(initialRewards);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [rewardMeta, setRewardMeta] = useState<any>({});
 
-  const handleApprove = (reward: Reward) => {
+  useEffect(() => {
+    rewardsApi.list().then((r) => {
+      if (r.data?.length) setRewards(r.data);
+      if (r.meta) setRewardMeta(r.meta);
+    }).catch(() => {});
+  }, []);
+
+  const handleApprove = async (reward: Reward) => {
     setRewards((prev) => prev.map((r) => r.id === reward.id ? { ...r, status: "paid" } : r));
-    toast("success", "Reward Approved", `${formatCurrency(reward.amount)} approved for ${reward.user}`);
+    try { await rewardsApi.approve(reward.id); } catch { /* optimistic */ }
+    toast("success", "Reward Approved", `${formatCurrency(reward.amount)} approved for ${reward.user ?? (reward as any).user_name}`);
   };
 
-  const handleApproveAll = () => {
+  const handleApproveAll = async () => {
     const pendingCount = rewards.filter((r) => r.status === "pending").length;
     if (pendingCount === 0) { toast("info", "No Pending Rewards", "All rewards are already processed"); return; }
     setRewards((prev) => prev.map((r) => r.status === "pending" ? { ...r, status: "paid" } : r));
+    try { await rewardsApi.approveAll(); } catch { /* optimistic */ }
     toast("success", "All Pending Approved", `${pendingCount} rewards queued for payment`);
   };
 
@@ -54,7 +49,12 @@ export default function RewardsPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {rewardPrograms.map((prog, i) => {
+        {[
+          { name: "Total Rewards", icon: Gift,       color: "from-[#FBD12D]/20 to-[#FBD12D]/5 border-[#FBD12D]/20 text-[#FBD12D]", value: formatCurrency(rewardMeta.total_amount   ?? rewardMeta.total_paid   ?? 0), sub: `${(rewardMeta.total   ?? rewards.length).toLocaleString()} total` },
+          { name: "Paid Out",      icon: TrendingUp, color: "from-success/20 to-success/5 border-success/20 text-success",         value: formatCurrency(rewardMeta.paid_amount    ?? 0),                               sub: `${(rewardMeta.paid    ?? rewards.filter(r => r.status === "paid").length).toLocaleString()} paid` },
+          { name: "Pending",       icon: Star,       color: "from-[#6366F1]/20 to-[#6366F1]/5 border-[#6366F1]/20 text-[#6366F1]", value: formatCurrency(rewardMeta.pending_amount  ?? 0),                               sub: `${(rewardMeta.pending ?? rewards.filter(r => r.status === "pending").length).toLocaleString()} pending` },
+          { name: "Processing",    icon: Zap,        color: "from-warning/20 to-warning/5 border-warning/20 text-warning",         value: formatCurrency(rewardMeta.processing_amount ?? 0),                             sub: `${(rewardMeta.processing ?? rewards.filter(r => r.status === "processing").length).toLocaleString()} processing` },
+        ].map((prog, i) => {
           const Icon = prog.icon;
           return (
             <motion.div key={prog.name} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
@@ -63,10 +63,9 @@ export default function RewardsPage() {
                 <Icon className="w-4 h-4" />
               </div>
               <h3 className="text-sm font-bold text-[var(--foreground)]">{prog.name}</h3>
-              <p className="text-2xl font-bold gold-text mt-1">{prog.totalPaid}</p>
-              <div className="mt-3 pt-3 border-t border-[var(--border)] flex justify-between text-[11px]">
-                <span className="text-[var(--muted)]">{prog.rate}</span>
-                <span className="font-semibold text-[var(--foreground)]">{prog.active.toLocaleString()} users</span>
+              <p className="text-2xl font-bold gold-text mt-1">{prog.value}</p>
+              <div className="mt-3 pt-3 border-t border-[var(--border)] text-[11px]">
+                <span className="text-[var(--muted)]">{prog.sub}</span>
               </div>
             </motion.div>
           );
@@ -103,20 +102,20 @@ export default function RewardsPage() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-[#FBD12D]/10 border border-[#FBD12D]/20 flex items-center justify-center">
-                        <span className="text-[10px] font-bold text-[#FBD12D]">{reward.avatar}</span>
+                        <span className="text-[10px] font-bold text-[#FBD12D]">{reward.avatar ?? ((reward as any).user_name ?? reward.user ?? "").slice(0,2).toUpperCase()}</span>
                       </div>
-                      <span className="text-sm font-semibold text-[var(--foreground)]">{reward.user}</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">{reward.user ?? (reward as any).user_name}</span>
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1.5">
                       <Gift className="w-3.5 h-3.5 text-[#FBD12D]" />
-                      <span className="text-sm text-[var(--foreground)]">{reward.type}</span>
+                      <span className="text-sm text-[var(--foreground)]">{reward.type ?? (reward as any).reward_type}</span>
                     </div>
                   </td>
                   <td className="px-5 py-3.5"><span className="text-sm font-bold gold-text">{formatCurrency(reward.amount)}</span></td>
                   <td className="px-5 py-3.5"><span className={cn("badge border", statusColors[reward.status])}>{reward.status}</span></td>
-                  <td className="px-5 py-3.5"><span className="text-xs text-[var(--muted)]">{reward.date}</span></td>
+                  <td className="px-5 py-3.5"><span className="text-xs text-[var(--muted)]">{reward.date ?? reward.paid_at?.slice(0, 10) ?? reward.created_at?.slice(0, 10) ?? "—"}</span></td>
                   <td className="px-5 py-3.5">
                     {reward.status === "pending" && (
                       <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleApprove(reward)}

@@ -2,8 +2,10 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { authApi, setToken, clearToken, getToken } from "@/lib/api";
 
 interface AuthUser {
+  id?: string;
   name: string;
   email: string;
   role: string;
@@ -24,12 +26,8 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
 });
 
-const DEMO_USERS = [
-  { email: "admin@zoro.com", password: "admin123", name: "Vivek Villuri", role: "Super Admin", avatar: "VV" },
-  { email: "demo@zoro.com", password: "demo123", name: "Demo User", role: "Admin", avatar: "DU" },
-];
-
 const STORAGE_KEY = "zoro_auth_user";
+const REFRESH_KEY = "zoro_refresh_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -41,11 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
+      const token  = getToken();
+      if (stored && token) {
         try {
-          const parsed = JSON.parse(stored);
           setIsAuthenticated(true);
-          setUser(parsed);
+          setUser(JSON.parse(stored));
         } catch {
           localStorage.removeItem(STORAGE_KEY);
         }
@@ -56,38 +54,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!isAuthenticated && pathname !== "/login") {
-      router.replace("/login");
-    }
-    if (isAuthenticated && pathname === "/login") {
-      router.replace("/");
-    }
+    if (!isAuthenticated && pathname !== "/login") router.replace("/login");
+    if (isAuthenticated && pathname === "/login") router.replace("/");
   }, [hydrated, isAuthenticated, pathname, router]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const found = DEMO_USERS.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
-    if (found) {
+    try {
+      const res = await authApi.login(email, password);
+      setToken(res.access);
+      if (typeof window !== "undefined") localStorage.setItem(REFRESH_KEY, res.refresh);
       const userData: AuthUser = {
-        name: found.name,
-        email: found.email,
-        role: found.role,
-        avatar: found.avatar,
+        id: res.user.id,
+        name: res.user.name,
+        email: res.user.email,
+        role: res.user.role,
+        avatar: res.user.avatar || (res.user.name?.split(" ").map((w: string) => w[0]).join("").toUpperCase() ?? "AD"),
       };
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
       setIsAuthenticated(true);
       setUser(userData);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   }, []);
 
   const logout = useCallback(() => {
     if (typeof window !== "undefined") {
+      const refresh = localStorage.getItem(REFRESH_KEY);
+      if (refresh) {
+        authApi.logout(refresh).catch(() => {});
+        localStorage.removeItem(REFRESH_KEY);
+      }
       localStorage.removeItem(STORAGE_KEY);
+      clearToken();
     }
     setIsAuthenticated(false);
     setUser(null);

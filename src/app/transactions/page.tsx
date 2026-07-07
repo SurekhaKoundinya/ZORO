@@ -1,17 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, ArrowUpRight, ArrowDownRight, ExternalLink, Copy, Clock, ChevronRight, ArrowLeftRight } from "lucide-react";
-import { recentTransactions } from "@/lib/dummy-data";
 import { formatCurrency, truncateHash, cn } from "@/lib/utils";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
-
-const allTx = [
-  ...recentTransactions,
-  ...recentTransactions.map((t, i) => ({ ...t, id: `TXN-00${1830 + i}`, time: "3 hr ago", amount: t.amount * 0.7 })),
-  ...recentTransactions.map((t, i) => ({ ...t, id: `TXN-00${1820 + i}`, time: "Yesterday", amount: t.amount * 1.3 })),
-];
+import { transactionsApi } from "@/lib/api";
 
 const statusColors: Record<string, string> = {
   completed: "text-success bg-success/10 border-success/20",
@@ -37,13 +31,28 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [selected, setSelected] = useState<typeof allTx[0] | null>(null);
+  const [allTx, setAllTx] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
   const [copied, setCopied] = useState("");
+  const [txStats, setTxStats] = useState<any>({});
 
-  const filtered = allTx.filter((tx) => {
-    const matchSearch = tx.id.includes(search) || tx.user.toLowerCase().includes(search.toLowerCase()) || tx.hash.includes(search);
+  useEffect(() => {
+    transactionsApi.list({ limit: "100", ordering: "-created_at" }).then((r) => {
+      if (r.data?.length) setAllTx(r.data);
+    }).catch(() => {});
+    transactionsApi.stats().then((r) => {
+      if (r.data) setTxStats(r.data);
+    }).catch(() => {});
+  }, []);
+
+  const filtered = allTx.filter((tx: any) => {
+    const id = tx.id ?? tx.tx_id ?? "";
+    const user = tx.user ?? tx.user_name ?? "";
+    const hash = tx.hash ?? tx.tx_hash ?? "";
+    const type = tx.type ?? tx.tx_type ?? "";
+    const matchSearch = id.includes(search) || user.toLowerCase().includes(search.toLowerCase()) || hash.includes(search);
     const matchStatus = statusFilter === "all" || tx.status === statusFilter;
-    const matchType = typeFilter === "all" || tx.type === typeFilter;
+    const matchType = typeFilter === "all" || type === typeFilter;
     return matchSearch && matchStatus && matchType;
   });
 
@@ -65,10 +74,10 @@ export default function TransactionsPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Today", value: "18,293", icon: ArrowLeftRight, color: "text-[#FBD12D]" },
-          { label: "Completed", value: "16,840", icon: ArrowDownRight, color: "text-success" },
-          { label: "Pending", value: "1,284", icon: Clock, color: "text-warning" },
-          { label: "Failed", value: "169", icon: X, color: "text-danger" },
+          { label: "Total Today", value: (txStats.total_today   ?? txStats.total     ?? 0).toLocaleString(), icon: ArrowLeftRight, color: "text-[#FBD12D]" },
+          { label: "Completed",   value: (txStats.completed     ?? txStats.success   ?? 0).toLocaleString(), icon: ArrowDownRight, color: "text-success"   },
+          { label: "Pending",     value: (txStats.pending       ?? 0).toLocaleString(),                     icon: Clock,          color: "text-warning"   },
+          { label: "Failed",      value: (txStats.failed        ?? txStats.error     ?? 0).toLocaleString(), icon: X,             color: "text-danger"    },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -137,32 +146,36 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {filtered.map((tx, i) => {
-                  const Icon = typeIcons[tx.type] || ArrowLeftRight;
+                {filtered.map((tx: any, i: number) => {
+                  const txType = tx.type ?? tx.tx_type ?? "";
+                  const txId   = tx.id ?? tx.tx_id ?? "";
+                  const txUser = tx.user ?? tx.user_name ?? "";
+                  const txAvatar = tx.avatar ?? tx.user_avatar ?? txUser.slice(0,2).toUpperCase();
+                  const Icon = typeIcons[txType] || ArrowLeftRight;
                   return (
                     <motion.tr
-                      key={tx.id}
+                      key={txId}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.02 }}
                       onClick={() => setSelected(tx)}
-                      className={cn("hover:bg-[#FBD12D]/3 cursor-pointer transition-colors", selected?.id === tx.id && "bg-[#FBD12D]/5")}
+                      className={cn("hover:bg-[#FBD12D]/3 cursor-pointer transition-colors", (selected?.id === tx.id || selected?.tx_id === tx.tx_id) && "bg-[#FBD12D]/5")}
                     >
                       <td className="px-5 py-3.5">
-                        <span className="text-xs font-mono text-[var(--muted)]">{tx.id}</span>
+                        <span className="text-xs font-mono text-[var(--muted)]">{txId}</span>
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-lg bg-[#FBD12D]/10 border border-[#FBD12D]/20 flex items-center justify-center">
-                            <span className="text-[9px] font-bold text-[#FBD12D]">{tx.avatar}</span>
+                            <span className="text-[9px] font-bold text-[#FBD12D]">{txAvatar}</span>
                           </div>
-                          <span className="text-sm font-medium text-[var(--foreground)] whitespace-nowrap">{tx.user}</span>
+                          <span className="text-sm font-medium text-[var(--foreground)] whitespace-nowrap">{txUser}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5">
-                          <Icon className={cn("w-3.5 h-3.5", typeColors[tx.type])} />
-                          <span className={cn("text-xs font-semibold", typeColors[tx.type])}>{tx.type}</span>
+                          <Icon className={cn("w-3.5 h-3.5", typeColors[txType])} />
+                          <span className={cn("text-xs font-semibold", typeColors[txType])}>{txType}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
@@ -176,7 +189,7 @@ export default function TransactionsPage() {
                         <span className="text-xs text-[var(--muted)]">{tx.network}</span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="text-xs text-[var(--muted)]">{tx.time}</span>
+                        <span className="text-xs text-[var(--muted)]">{tx.time ?? tx.created_at?.slice(0, 16).replace("T", " ") ?? "—"}</span>
                       </td>
                       <td className="px-5 py-3.5">
                         <ChevronRight className="w-4 h-4 text-[var(--muted)]" />
@@ -208,7 +221,7 @@ export default function TransactionsPage() {
 
                 {/* Amount */}
                 <div className="p-5 rounded-2xl bg-gradient-to-br from-[#FBD12D]/10 to-transparent border border-[#FBD12D]/20 mb-4 text-center">
-                  <p className="text-[11px] text-[var(--muted)] mb-1 font-medium uppercase tracking-wider">{selected.type}</p>
+                  <p className="text-[11px] text-[var(--muted)] mb-1 font-medium uppercase tracking-wider">{selected.type ?? selected.tx_type}</p>
                   <p className="text-3xl font-bold gold-text">{formatCurrency(selected.amount)}</p>
                   <p className="text-sm text-[var(--muted)] mt-1">{selected.currency} · {selected.network}</p>
                   <span className={cn("badge border mt-2 inline-flex", statusColors[selected.status])}>{selected.status}</span>
@@ -218,8 +231,8 @@ export default function TransactionsPage() {
                 <div className="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] mb-4">
                   <p className="text-[10px] text-[var(--muted)] font-medium mb-1.5">Blockchain Hash</p>
                   <div className="flex items-center gap-2">
-                    <code className="text-[11px] font-mono text-[var(--foreground)] truncate flex-1">{truncateHash(selected.hash, 10, 8)}</code>
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleCopy(selected.hash, "hash")} className="text-[10px] text-[#FBD12D] font-medium shrink-0">
+                    <code className="text-[11px] font-mono text-[var(--foreground)] truncate flex-1">{truncateHash(selected.hash ?? selected.tx_hash ?? "", 10, 8)}</code>
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleCopy(selected.hash ?? selected.tx_hash ?? "", "hash")} className="text-[10px] text-[#FBD12D] font-medium shrink-0">
                       {copied === "hash" ? "✓" : <Copy className="w-3 h-3" />}
                     </motion.button>
                   </div>
@@ -228,11 +241,11 @@ export default function TransactionsPage() {
                 {/* Details */}
                 <div className="space-y-3 mb-5">
                   {[
-                    { label: "Transaction ID", value: selected.id },
-                    { label: "User", value: selected.user },
-                    { label: "Wallet", value: selected.wallet },
+                    { label: "Transaction ID", value: selected.id ?? selected.tx_id },
+                    { label: "User", value: selected.user ?? selected.user_name },
+                    { label: "Wallet", value: selected.wallet ?? selected.wallet_address },
                     { label: "Network", value: selected.network },
-                    { label: "Time", value: selected.time },
+                    { label: "Time", value: selected.time ?? selected.created_at },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between py-2 border-b border-[var(--border)]">
                       <span className="text-xs text-[var(--muted)]">{label}</span>

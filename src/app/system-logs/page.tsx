@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, Filter, AlertTriangle, CheckCircle, Info, Shield, Activity } from "lucide-react";
-import { systemLogs } from "@/lib/dummy-data";
 import { cn } from "@/lib/utils";
+import { systemLogsApi } from "@/lib/api";
 
 const severityConfig = {
   info: { color: "text-[#FBD12D] bg-[#FBD12D]/10 border-[#FBD12D]/20", dotColor: "bg-[#FBD12D]", label: "INFO" },
@@ -29,18 +29,28 @@ export default function SystemLogsPage() {
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState("all");
   const [category, setCategory] = useState("all");
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    systemLogsApi.list({ limit: "200", ordering: "-created_at" }).then((r) => {
+      if (r.data?.length) setSystemLogs(r.data);
+    }).catch(() => {});
+  }, []);
 
   const filtered = systemLogs.filter((log) => {
-    const matchSearch = log.message.toLowerCase().includes(search.toLowerCase()) ||
-      log.category.toLowerCase().includes(search.toLowerCase()) ||
-      log.user.toLowerCase().includes(search.toLowerCase()) ||
-      log.id.toLowerCase().includes(search.toLowerCase());
-    const matchSev = severity === "all" || log.severity === severity;
-    const matchCat = category === "all" || log.category === category;
+    const msg = (log.message ?? log.description ?? log.action ?? "").toLowerCase();
+    const cat = (log.category ?? log.log_type ?? "").toLowerCase();
+    const user = (log.user ?? log.user_email ?? log.actor_label ?? log.actor ?? "").toLowerCase();
+    const id = (log.id ?? log.log_id ?? "").toLowerCase();
+    const matchSearch = msg.includes(search.toLowerCase()) || cat.includes(search.toLowerCase()) ||
+      user.includes(search.toLowerCase()) || id.includes(search.toLowerCase());
+    const sev = log.severity ?? log.level ?? "info";
+    const matchSev = severity === "all" || sev === severity;
+    const matchCat = category === "all" || (log.category ?? log.log_type) === category;
     return matchSearch && matchSev && matchCat;
   });
 
-  const categories = Array.from(new Set(systemLogs.map((l) => l.category)));
+  const categories = Array.from(new Set(systemLogs.map((l) => l.category ?? l.log_type ?? "")));
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
@@ -55,13 +65,13 @@ export default function SystemLogsPage() {
         </span>
       </div>
 
-      {/* Stats */}
+      {/* Stats — derived from loaded log data */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Events", value: "48,291", color: "text-[#FBD12D] bg-[#FBD12D]/10", icon: Activity },
-          { label: "Errors Today", value: "12", color: "text-danger bg-danger/10", icon: AlertTriangle },
-          { label: "Warnings", value: "84", color: "text-warning bg-warning/10", icon: AlertTriangle },
-          { label: "Security Events", value: "3", color: "text-danger bg-danger/10", icon: Shield },
+          { label: "Total Events",    value: systemLogs.length.toLocaleString(),                                                                                               color: "text-[#FBD12D] bg-[#FBD12D]/10", icon: Activity      },
+          { label: "Errors",          value: systemLogs.filter(l => (l.severity ?? l.level) === "danger"   || (l.severity ?? l.level) === "error").length.toLocaleString(),   color: "text-danger bg-danger/10",        icon: AlertTriangle },
+          { label: "Warnings",        value: systemLogs.filter(l => (l.severity ?? l.level) === "warning").length.toLocaleString(),                                            color: "text-warning bg-warning/10",      icon: AlertTriangle },
+          { label: "Security Events", value: systemLogs.filter(l => (l.category ?? l.log_type ?? "").toUpperCase() === "SECURITY").length.toLocaleString(),                   color: "text-danger bg-danger/10",        icon: Shield        },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -104,7 +114,8 @@ export default function SystemLogsPage() {
       <div className="card overflow-hidden">
         <div className="divide-y divide-[var(--border)]">
           {filtered.map((log, i) => {
-            const cfg = severityConfig[log.severity as keyof typeof severityConfig];
+            const sev = (log.severity ?? log.level ?? "info") as keyof typeof severityConfig;
+            const cfg = severityConfig[sev] ?? severityConfig.info;
             return (
               <motion.div
                 key={log.id}
@@ -119,18 +130,18 @@ export default function SystemLogsPage() {
                   <span className={cn("badge border text-[10px] w-full text-center justify-center", cfg.color)}>
                     {cfg.label}
                   </span>
-                  <span className="text-[10px] text-[var(--muted)] font-mono">{log.time}</span>
+                  <span className="text-[10px] text-[var(--muted)] font-mono">{log.time ?? log.created_at?.slice(11,16) ?? ""}</span>
                 </div>
 
                 {/* Category */}
-                <span className={cn("px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 mt-0.5", categoryColors[log.category] || "text-[var(--muted)] bg-[var(--border)]")}>
-                  {log.category}
+                <span className={cn("px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 mt-0.5", categoryColors[log.category ?? log.log_type] || "text-[var(--muted)] bg-[var(--border)]")}>
+                  {log.category ?? log.log_type}
                 </span>
 
                 {/* Message */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-[var(--foreground)]">{log.message}</p>
-                  <p className="text-[11px] text-[var(--muted)] mt-0.5">{log.user} · {log.id}</p>
+                  <p className="text-sm text-[var(--foreground)]">{log.message ?? log.description ?? log.action}</p>
+                  <p className="text-[11px] text-[var(--muted)] mt-0.5">{log.actor_label ?? log.user ?? log.user_email ?? log.actor} · {log.log_id ?? log.id}</p>
                 </div>
 
                 {/* Dot */}
